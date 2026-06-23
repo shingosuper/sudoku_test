@@ -29,6 +29,10 @@ func _run() -> void:
 	game.immediate_errors = true
 	game._load_level(0)
 	game._on_cell_pressed(0, 0)
+	assert(game.cell_states[0][0] == "blocked", "First tap must place an exclusion mark")
+	game._on_cell_pressed(0, 0)
+	assert(game.cell_states[0][0] == "piece", "Second tap must place a piece")
+	game._on_cell_pressed(0, 1)
 	game._on_cell_pressed(0, 1)
 	assert(game.board.error_cells.size() == 2, "Two pieces in one row must conflict")
 	game._undo()
@@ -36,13 +40,18 @@ func _run() -> void:
 	game._clear_board()
 	assert(game._piece_positions().is_empty(), "Clear must remove pieces")
 
+	game.hint_count = 3
+	game._update_hint_button()
 	var coins_before: int = game.coin_count
+	var hints_before: int = game.hint_count
 	game._use_hint()
 	assert(game._piece_positions().size() == 1, "Hint must place a correct piece")
-	assert(game.coin_count == coins_before - 5, "Hint must charge the configured coin cost")
+	assert(game.hint_count == hints_before - 1, "Hint must consume one available use")
+	assert(game.coin_count == coins_before, "Free hint uses must not charge coins")
 
 	game._load_level(0)
 	for coordinate in game.current_level["solution"]:
+		game._on_cell_pressed(int(coordinate[0]), int(coordinate[1]))
 		game._on_cell_pressed(int(coordinate[0]), int(coordinate[1]))
 	assert(game.is_completed, "A valid solution must complete the level")
 

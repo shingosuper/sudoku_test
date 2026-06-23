@@ -3,7 +3,9 @@ extends Control
 const LevelStoreScript = preload("res://scripts/level_store.gd")
 const GameBoardScript = preload("res://scripts/game_board.gd")
 const SAVE_PATH := "user://color_queens_save.json"
+const SAVE_VERSION := 2
 const HINT_COST := 5
+const INITIAL_HINT_COUNT := 3
 const WIN_REWARD := 10
 const INK := Color("#26334A")
 const MUTED := Color("#718096")
@@ -11,15 +13,15 @@ const CREAM := Color("#FFF8ED")
 const CARD := Color("#FFFFFF")
 const GREEN := Color("#48B985")
 const REGION_COLORS = [
-	Color("#FFB8C8"),
-	Color("#A8D8FF"),
-	Color("#BCE6A8"),
-	Color("#D8C0FF"),
-	Color("#FFD98E"),
-	Color("#FFAAA4"),
-	Color("#9FE4D8"),
-	Color("#C8D5F2"),
-	Color("#F3B9E5")
+	Color("#FFE88A"),
+	Color("#70B7FF"),
+	Color("#82D989"),
+	Color("#B59AF1"),
+	Color("#FF8C8C"),
+	Color("#64D8C4"),
+	Color("#F6A6D7"),
+	Color("#A8B8D8"),
+	Color("#FFB56B")
 ]
 
 var levels: Array = []
@@ -29,7 +31,7 @@ var cell_states: Array = []
 var move_history: Array = []
 var completed_levels: Array = []
 var coin_count := 55
-var hint_count := 0
+var hint_count := INITIAL_HINT_COUNT
 var immediate_errors := true
 var is_completed := false
 var resume_level_id := -1
@@ -246,10 +248,11 @@ func _build_action_bar() -> Control:
 	clear_button.pressed.connect(_clear_board)
 	row.add_child(clear_button)
 
-	hint_button = _action_button("✦  提示  -%d" % HINT_COST, Color("#EAF8F0"))
+	hint_button = _action_button("", Color("#EAF8F0"))
 	hint_button.add_theme_color_override("font_color", Color("#23845C"))
 	hint_button.pressed.connect(_use_hint)
 	row.add_child(hint_button)
+	_update_hint_button()
 	return row
 
 
@@ -342,7 +345,7 @@ func _build_toast() -> void:
 func _build_help_dialog() -> void:
 	help_dialog = AcceptDialog.new()
 	help_dialog.title = "怎么玩"
-	help_dialog.dialog_text = "在每个颜色区域放置一个皇冠，并同时满足：\n\n• 每一行只有一个皇冠\n• 每一列只有一个皇冠\n• 每个颜色区域只有一个皇冠\n• 皇冠不能八方向相邻\n\n点按格子会在皇冠、排除标记、空白间循环。"
+	help_dialog.dialog_text = "在每个颜色区域放置一个皇冠，并同时满足：\n\n• 每一行只有一个皇冠\n• 每一列只有一个皇冠\n• 每个颜色区域只有一个皇冠\n• 皇冠不能八方向相邻\n\n第一次点按标记 X，第二次点按放置皇冠，第三次恢复空白。"
 	help_dialog.ok_button_text = "知道了"
 	help_dialog.unresizable = true
 	add_child(help_dialog)
@@ -383,11 +386,11 @@ func _on_cell_pressed(row: int, col: int) -> void:
 	var state: String = cell_states[row][col]
 	match state:
 		"empty":
-			cell_states[row][col] = "piece"
-		"piece", "hint":
 			cell_states[row][col] = "blocked"
-		"blocked":
+		"piece", "hint":
 			cell_states[row][col] = "empty"
+		"blocked":
+			cell_states[row][col] = "piece"
 		_:
 			cell_states[row][col] = "empty"
 	board.set_states(cell_states)
@@ -419,9 +422,6 @@ func _clear_board() -> void:
 func _use_hint() -> void:
 	if is_completed:
 		return
-	if coin_count < HINT_COST:
-		_show_toast("金币不足，点顶部 + 可领取演示奖励")
-		return
 
 	var target := Vector2i(-1, -1)
 	for coordinate in current_level["solution"]:
@@ -433,14 +433,20 @@ func _use_hint() -> void:
 	if target.x < 0:
 		_show_toast("所有正确位置都已找到")
 		return
+	if hint_count <= 0 and coin_count < HINT_COST:
+		_show_toast("提示次数与金币不足，点顶部 + 可领取演示奖励")
+		return
 
 	_push_history()
-	coin_count -= HINT_COST
-	hint_count += 1
+	if hint_count > 0:
+		hint_count -= 1
+	else:
+		coin_count -= HINT_COST
 	cell_states[target.y][target.x] = "hint"
 	board.set_states(cell_states)
 	board.play_cell_feedback(target.y, target.x)
 	_update_coin_label()
+	_update_hint_button()
 	_validate_and_update(true)
 	_save_game()
 	_show_toast("提示：已点亮一个正确位置")
@@ -587,7 +593,11 @@ func _load_save() -> void:
 		return
 	current_level_index = int(data.get("currentLevelIndex", 0))
 	coin_count = int(data.get("coinCount", 55))
-	hint_count = int(data.get("hintCount", 0))
+	if int(data.get("saveVersion", 1)) >= SAVE_VERSION:
+		hint_count = maxi(0, int(data.get("hintCount", INITIAL_HINT_COUNT)))
+	else:
+		# Version 1 stored the number of hints used, not the remaining count.
+		hint_count = INITIAL_HINT_COUNT
 	completed_levels.assign(data.get("completedLevels", []))
 	for index in range(completed_levels.size()):
 		completed_levels[index] = int(completed_levels[index])
@@ -601,6 +611,7 @@ func _save_game() -> void:
 	if current_level.is_empty():
 		return
 	var data := {
+		"saveVersion": SAVE_VERSION,
 		"currentLevelIndex": current_level_index,
 		"currentLevelId": int(current_level["levelId"]),
 		"coinCount": coin_count,
@@ -619,6 +630,15 @@ func _save_game() -> void:
 func _update_coin_label() -> void:
 	if coin_label:
 		coin_label.text = "●  %d" % coin_count
+
+
+func _update_hint_button() -> void:
+	if not hint_button:
+		return
+	if hint_count > 0:
+		hint_button.text = "✦  提示  ×%d" % hint_count
+	else:
+		hint_button.text = "✦  提示  -%d" % HINT_COST
 
 
 func _show_toast(message: String) -> void:
