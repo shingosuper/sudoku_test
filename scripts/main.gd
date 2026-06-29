@@ -39,6 +39,7 @@ var resume_states: Array = []
 var resume_completed := false
 
 var board
+var level_picker: OptionButton
 var level_label: Label
 var level_name_label: Label
 var coin_label: Label
@@ -142,14 +143,31 @@ func _build_top_bar() -> Control:
 	heart.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(heart)
 
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(spacer)
+	level_picker = OptionButton.new()
+	level_picker.custom_minimum_size = Vector2(146, 40)
+	level_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	level_picker.focus_mode = Control.FOCUS_NONE
+	level_picker.tooltip_text = "切换调试关卡"
+	level_picker.add_theme_font_size_override("font_size", 15)
+	level_picker.add_theme_color_override("font_color", INK)
+	level_picker.add_theme_stylebox_override("normal", _button_style(Color("#F1F4F7"), 13))
+	level_picker.add_theme_stylebox_override("hover", _button_style(Color("#E7EDF2"), 13))
+	level_picker.add_theme_stylebox_override("pressed", _button_style(Color("#DDE5EC"), 13))
+	for index in range(levels.size()):
+		var level: Dictionary = levels[index]
+		level_picker.add_item("关卡 %d · %s" % [int(level["levelId"]), str(level.get("name", ""))], index)
+	level_picker.item_selected.connect(_on_level_selected)
+	row.add_child(level_picker)
 
 	var rank := _small_button("榜")
 	rank.tooltip_text = "排行榜（预留）"
 	rank.pressed.connect(func() -> void: _show_toast("排行榜将在后续版本开放"))
 	row.add_child(rank)
+
+	var editor := _small_button("编")
+	editor.tooltip_text = "关卡编辑器"
+	editor.pressed.connect(_open_level_editor)
+	row.add_child(editor)
 
 	var theme_button := _small_button("♛")
 	theme_button.tooltip_text = "主题皮肤"
@@ -368,6 +386,7 @@ func _load_level(index: int, allow_resume: bool = false) -> void:
 
 	level_label.text = "关卡 %d" % int(current_level["levelId"])
 	level_name_label.text = "  ·  %s" % str(current_level.get("name", ""))
+	_update_level_picker()
 	coach_label.text = str(current_level.get("tutorial", "放置全部皇冠，满足四条规则。"))
 	coach_label.add_theme_color_override("font_color", Color("#72552B"))
 	progress_bar.max_value = int(current_level["targetCount"])
@@ -559,6 +578,18 @@ func _on_help() -> void:
 	help_dialog.popup_centered(Vector2i(450, 360))
 
 
+func _open_level_editor() -> void:
+	get_tree().change_scene_to_file("res://scenes/level_editor.tscn")
+
+
+func _on_level_selected(index: int) -> void:
+	if index == current_level_index:
+		return
+	_load_level(index)
+	_save_game()
+	_show_toast("已切换到关卡 %d" % int(current_level["levelId"]))
+
+
 func _push_history() -> void:
 	move_history.append(cell_states.duplicate(true))
 	if move_history.size() > 100:
@@ -639,6 +670,11 @@ func _update_hint_button() -> void:
 		hint_button.text = "✦  提示  ×%d" % hint_count
 	else:
 		hint_button.text = "✦  提示  -%d" % HINT_COST
+
+
+func _update_level_picker() -> void:
+	if level_picker and level_picker.selected != current_level_index:
+		level_picker.select(current_level_index)
 
 
 func _show_toast(message: String) -> void:
