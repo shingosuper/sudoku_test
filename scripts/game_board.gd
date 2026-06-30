@@ -19,6 +19,8 @@ var region_colors: Array = []
 var piece_symbol := "♛"
 var pulse_cell := Vector2i(-1, -1)
 var pulse_strength := 0.0
+var guide_pulse_cell := Vector2i(-1, -1)
+var guide_pulse_strength := 0.0
 var victory_strength := 0.0
 
 
@@ -63,6 +65,16 @@ func play_cell_feedback(row: int, col: int) -> void:
 	tween.tween_method(_set_pulse, 1.0, 0.0, 0.18)
 
 
+func play_guide_feedback(row: int, col: int) -> void:
+	guide_pulse_cell = Vector2i(col, row)
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_method(_set_guide_pulse, 0.0, 1.0, 0.12)
+	tween.tween_method(_set_guide_pulse, 1.0, 0.15, 0.16)
+	tween.tween_method(_set_guide_pulse, 0.15, 1.0, 0.12)
+	tween.tween_method(_set_guide_pulse, 1.0, 0.0, 0.24)
+
+
 func play_victory() -> void:
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_SINE)
@@ -72,6 +84,11 @@ func play_victory() -> void:
 
 func _set_pulse(value: float) -> void:
 	pulse_strength = value
+	queue_redraw()
+
+
+func _set_guide_pulse(value: float) -> void:
+	guide_pulse_strength = value
 	queue_redraw()
 
 
@@ -127,13 +144,21 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 	var cell_key := Vector2i(col, row)
 	if cell_key == pulse_cell:
 		rect = rect.grow(cell_size * 0.045 * pulse_strength)
+	if cell_key == guide_pulse_cell:
+		rect = rect.grow(cell_size * 0.07 * guide_pulse_strength)
 
 	var region_id := int(regions[row][col]) - 1
 	var color: Color = region_colors[region_id % region_colors.size()]
 	if error_cells.has(cell_key):
 		color = color.lerp(Color("#FF5E67"), 0.58)
 	elif guide_cells.has(cell_key):
-		color = color.lerp(Color.WHITE, 0.38)
+		var guide_kind := _guide_kind(cell_key)
+		if guide_kind == "unit":
+			color = color.lerp(Color("#CDE8FF"), 0.42)
+		elif guide_kind == "candidate":
+			color = color.lerp(Color("#D9F8DF"), 0.44)
+		else:
+			color = color.lerp(Color.WHITE, 0.38)
 	elif victory_strength > 0.0:
 		color = color.lerp(Color.WHITE, victory_strength * 0.32)
 
@@ -147,8 +172,16 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 		box.border_color = Color("#D92F42")
 		box.set_border_width_all(maxi(2, int(cell_size * 0.04)))
 	elif guide_cells.has(cell_key):
-		box.border_color = Color("#23845C") if _guide_kind(cell_key) == "place" else Color("#D98A24")
-		box.set_border_width_all(maxi(3, int(cell_size * 0.055)))
+		var guide_kind := _guide_kind(cell_key)
+		if guide_kind == "place":
+			box.border_color = Color("#23845C")
+		elif guide_kind == "exclude":
+			box.border_color = Color("#D98A24")
+		elif guide_kind == "candidate":
+			box.border_color = Color("#48B985")
+		else:
+			box.border_color = Color("#3C8DDE")
+		box.set_border_width_all(maxi(3, int(cell_size * (0.055 + guide_pulse_strength * 0.035))))
 	draw_style_box(box, rect)
 
 	var state: String = cell_states[row][col]

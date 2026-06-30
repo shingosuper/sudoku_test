@@ -49,7 +49,8 @@ func _run() -> void:
 	var hints_before: int = game.hint_count
 	game._use_hint()
 	assert(game._piece_positions().is_empty(), "Hint should teach without placing a piece")
-	assert(game.board.guide_cells.size() == 1, "Hint must highlight one candidate cell")
+	assert(game.board.guide_cells.size() >= 1, "Hint must highlight the best next reasoning step")
+	assert(str(game.coach_label.text).length() >= 20, "Hint must explain why this step is useful now")
 	assert(game.hint_count == hints_before - 1, "Hint must consume one available use")
 	assert(game.coin_count == coins_before, "Free hint uses must not charge coins")
 
@@ -96,6 +97,10 @@ func _validate_solution(level: Dictionary) -> void:
 			var b := positions[j]
 			assert(not (absi(a.x - b.x) <= 1 and absi(a.y - b.y) <= 1), "Solution pieces cannot be adjacent")
 	assert(_count_solutions(level, 2) == 1, "Each default level should have a unique solution")
+	assert(str(level.get("difficulty", "")) != "", "Each default level should have a difficulty label")
+	assert(str(level.get("logicStatus", "")) == "no_guess", "Each default level should be marked as no-guess solvable")
+	assert(level.get("hintSteps", []).size() == int(level.get("targetCount", 0)), "Each default level should prepare one hint step per target")
+	assert(level.get("solveSteps", []).size() >= int(level.get("targetCount", 0)), "Each default level should prepare a logical solve path")
 
 
 func _count_solutions(level: Dictionary, limit: int) -> int:

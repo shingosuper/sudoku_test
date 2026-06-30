@@ -12,6 +12,7 @@ const MUTED := Color("#718096")
 const CREAM := Color("#FFF8ED")
 const CARD := Color("#FFFFFF")
 const GREEN := Color("#48B985")
+const REGION_COLOR_NAMES = ["黄色", "蓝色", "绿色", "紫色", "红色", "青色", "粉色", "灰蓝色", "橙色"]
 const REGION_COLORS = [
 	Color("#FFE88A"),
 	Color("#70B7FF"),
@@ -34,6 +35,8 @@ var coin_count := 55
 var hint_count := INITIAL_HINT_COUNT
 var immediate_errors := true
 var is_completed := false
+var active_hint_step: Dictionary = {}
+var active_hint_stage := 0
 var resume_level_id := -1
 var resume_states: Array = []
 var resume_completed := false
@@ -655,12 +658,12 @@ func _build_completion_overlay() -> void:
 	completion_overlay.add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(410, 330)
+	panel.custom_minimum_size = Vector2(430, 370)
 	panel.add_theme_stylebox_override("panel", _card_style(CARD, 28, true, 28))
 	center.add_child(panel)
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 14)
+	column.add_theme_constant_override("separation", 16)
 	panel.add_child(column)
 
 	var crown := Label.new()
@@ -684,15 +687,18 @@ func _build_completion_overlay() -> void:
 	column.add_child(reward_label)
 
 	var next_button := _action_button("下一关  →", Color("#FFB84E"))
+	next_button.custom_minimum_size.y = 58
 	next_button.add_theme_color_override("font_color", INK)
+	next_button.add_theme_font_size_override("font_size", 22)
 	next_button.pressed.connect(_next_level)
 	column.add_child(next_button)
 
 	var replay_button := Button.new()
 	replay_button.text = "重玩本关"
 	replay_button.flat = true
+	replay_button.custom_minimum_size.y = 52
 	replay_button.add_theme_color_override("font_color", MUTED)
-	replay_button.add_theme_font_size_override("font_size", 16)
+	replay_button.add_theme_font_size_override("font_size", 19)
 	replay_button.pressed.connect(_replay_level)
 	column.add_child(replay_button)
 
@@ -726,6 +732,8 @@ func _load_level(index: int, allow_resume: bool = false) -> void:
 	current_level_index = index
 	current_level = levels[index]
 	is_completed = false
+	active_hint_step.clear()
+	active_hint_stage = 0
 	move_history.clear()
 	completion_overlay.hide()
 
@@ -754,6 +762,8 @@ func _load_level(index: int, allow_resume: bool = false) -> void:
 func _on_cell_pressed(row: int, col: int) -> void:
 	if is_completed:
 		return
+	active_hint_step.clear()
+	active_hint_stage = 0
 	board.set_guides({})
 	_push_history()
 	var state: String = cell_states[row][col]
@@ -786,6 +796,8 @@ func _clear_board() -> void:
 		return
 	_push_history()
 	cell_states = _blank_states(int(current_level["rows"]), int(current_level["cols"]))
+	active_hint_step.clear()
+	active_hint_stage = 0
 	board.set_states(cell_states)
 	board.set_guides({})
 	_validate_and_update(false)
@@ -797,7 +809,7 @@ func _use_hint() -> void:
 	if is_completed:
 		return
 
-	var hint := _build_teaching_hint()
+	var hint := _build_best_next_hint()
 	if hint.is_empty():
 		_show_toast("当前没有明显可提示的位置")
 		return
@@ -810,15 +822,17 @@ func _use_hint() -> void:
 	else:
 		coin_count -= HINT_COST
 
+	var guides: Dictionary = hint.get("guides", {})
+	board.set_guides(guides)
 	var target: Vector2i = hint["target"]
-	board.set_guides({target: str(hint.get("kind", "place"))})
-	board.play_cell_feedback(target.y, target.x)
+	if target.x >= 0:
+		board.play_guide_feedback(target.y, target.x)
 	coach_label.text = str(hint["message"])
 	coach_label.add_theme_color_override("font_color", Color("#23845C"))
 	_update_coin_label()
 	_update_hint_button()
 	_save_game()
-	_show_toast("提示已标出：先理解原因，再自己落子")
+	_show_toast("已给出当前最优先的一步判断")
 
 
 func _validate_and_update(allow_completion: bool) -> void:
@@ -860,6 +874,686 @@ func _find_conflicts(pieces: Array) -> Dictionary:
 	return result
 
 
+func _build_best_next_hint() -> Dictionary:
+	var unit_hint := _best_single_candidate_hint()
+	if not unit_hint.is_empty():
+		return unit_hint
+
+	var lock_hint := _best_locked_candidate_hint()
+	if not lock_hint.is_empty():
+		return lock_hint
+
+	var subset_hint := _best_subset_lock_hint()
+	if not subset_hint.is_empty():
+		return subset_hint
+
+	var lookahead_hint := _best_lookahead_exclusion_hint()
+	if not lookahead_hint.is_empty():
+		return lookahead_hint
+
+	var exclusion_hint := _best_exclusion_hint()
+	if not exclusion_hint.is_empty():
+		return exclusion_hint
+
+	return _best_candidate_focus_hint()
+
+
+func _best_single_candidate_hint() -> Dictionary:
+	var best := {}
+	for row in range(int(current_level["rows"])):
+		if _row_has_piece(row):
+			continue
+		var unit_cells := _row_cells(row)
+		var candidates := _available_candidates_in_cells(unit_cells)
+		if candidates.size() == 1:
+			best = _choose_stronger_unit_hint(best, _make_single_candidate_hint("第 %d 行" % [row + 1], candidates[0], unit_cells))
+
+	for col in range(int(current_level["cols"])):
+		if _col_has_piece(col):
+			continue
+		var unit_cells := _col_cells(col)
+		var candidates := _available_candidates_in_cells(unit_cells)
+		if candidates.size() == 1:
+			best = _choose_stronger_unit_hint(best, _make_single_candidate_hint("第 %d 列" % [col + 1], candidates[0], unit_cells))
+
+	for region_id in _region_ids():
+		if _region_has_piece(region_id):
+			continue
+		var unit_cells := _region_cells(region_id)
+		var candidates := _available_candidates_in_cells(unit_cells)
+		if candidates.size() == 1:
+			best = _choose_stronger_unit_hint(best, _make_single_candidate_hint(_region_name(region_id), candidates[0], unit_cells))
+	return best
+
+
+func _choose_stronger_unit_hint(current: Dictionary, candidate: Dictionary) -> Dictionary:
+	if current.is_empty():
+		return candidate
+	if int(candidate.get("score", 0)) > int(current.get("score", 0)):
+		return candidate
+	return current
+
+
+func _make_single_candidate_hint(unit_name: String, target: Vector2i, unit_cells: Array[Vector2i]) -> Dictionary:
+	var exclusions := _excluded_cells_in_cells(unit_cells)
+	var guides := _guides_for_unit(unit_cells, _available_candidates_in_cells(unit_cells), exclusions)
+	guides[target] = "place"
+	return {
+		"target": target,
+		"guides": guides,
+		"score": exclusions.size(),
+		"message": _best_single_candidate_message(unit_name, target, unit_cells, exclusions)
+	}
+
+
+func _best_single_candidate_message(unit_name: String, target: Vector2i, unit_cells: Array[Vector2i], exclusions: Array[Dictionary]) -> String:
+	var summary := _exclusion_summary(exclusions)
+	var detail := _first_exclusion_detail(exclusions)
+	var target_region := int(current_level["regions"][target.y][target.x])
+	var target_text := "第 %d 行第 %d 列" % [target.y + 1, target.x + 1]
+	var message := "%s还需要 1 个皇冠，%s，所以只剩 %s。" % [unit_name, summary, target_text]
+	message += " 这个格所在列还剩 %d 个候选，%s还剩 %d 个候选。" % [_available_candidates_in_col(target.x).size(), _region_name(target_region), _available_candidates_in_region(target_region).size()]
+	if detail != "":
+		message += " 例如：%s。" % detail
+	return message
+
+
+func _best_locked_candidate_hint() -> Dictionary:
+	for row in range(int(current_level["rows"])):
+		if _row_has_piece(row):
+			continue
+		var candidates := _available_candidates_in_row(row)
+		if candidates.size() >= 2 and candidates.size() <= 3:
+			var region_id := _shared_region(candidates)
+			if region_id > 0:
+				var other_cells := _candidate_cells_except(_available_candidates_in_region(region_id), candidates)
+				if not other_cells.is_empty():
+					return _make_locked_hint("第 %d 行" % [row + 1], candidates, _region_name(region_id), other_cells)
+
+	for col in range(int(current_level["cols"])):
+		if _col_has_piece(col):
+			continue
+		var candidates := _available_candidates_in_col(col)
+		if candidates.size() >= 2 and candidates.size() <= 3:
+			var region_id := _shared_region(candidates)
+			if region_id > 0:
+				var other_cells := _candidate_cells_except(_available_candidates_in_region(region_id), candidates)
+				if not other_cells.is_empty():
+					return _make_locked_hint("第 %d 列" % [col + 1], candidates, _region_name(region_id), other_cells)
+
+	for region_id in _region_ids():
+		if _region_has_piece(region_id):
+			continue
+		var candidates := _available_candidates_in_region(region_id)
+		if candidates.size() >= 2 and candidates.size() <= 3:
+			var row := _shared_row(candidates)
+			if row >= 0:
+				var other_cells := _candidate_cells_except(_available_candidates_in_row(row), candidates)
+				if not other_cells.is_empty():
+					return _make_locked_hint(_region_name(region_id), candidates, "第 %d 行" % [row + 1], other_cells)
+			var col := _shared_col(candidates)
+			if col >= 0:
+				var other_cells := _candidate_cells_except(_available_candidates_in_col(col), candidates)
+				if not other_cells.is_empty():
+					return _make_locked_hint(_region_name(region_id), candidates, "第 %d 列" % [col + 1], other_cells)
+	return {}
+
+
+func _make_locked_hint(source_name: String, locked_cells: Array[Vector2i], target_name: String, other_cells: Array[Vector2i]) -> Dictionary:
+	var guides := {}
+	for cell in locked_cells:
+		guides[cell] = "candidate"
+	for cell in other_cells:
+		guides[cell] = "exclude"
+	var focus := locked_cells[0]
+	return {
+		"target": focus,
+		"guides": guides,
+		"message": "%s的皇冠只可能在这些绿色候选里，而这些候选都落在%s内。因此%s里的其它橙色候选可以先排除。" % [source_name, target_name, target_name]
+	}
+
+
+func _best_subset_lock_hint() -> Dictionary:
+	var pairs := [
+		["row", "col"],
+		["col", "row"],
+		["row", "region"],
+		["col", "region"],
+		["region", "row"],
+		["region", "col"]
+	]
+	for pair in pairs:
+		var source_kind := str(pair[0])
+		var target_kind := str(pair[1])
+		var units := _open_unit_candidates(source_kind)
+		for group_size in range(2, 4):
+			var combinations := _unit_index_combinations(units.size(), group_size)
+			for combination in combinations:
+				var source_names: Array[String] = []
+				var source_cells: Array[Vector2i] = []
+				var target_values: Array[int] = []
+				for unit_position in combination:
+					var unit: Dictionary = units[int(unit_position)]
+					source_names.append(str(unit["name"]))
+					for cell in unit["candidates"]:
+						if not source_cells.has(cell):
+							source_cells.append(cell)
+						var value := _cell_unit_value(cell, target_kind)
+						if not target_values.has(value):
+							target_values.append(value)
+				if target_values.size() != group_size:
+					continue
+				var other_cells: Array[Vector2i] = []
+				for target_value in target_values:
+					for cell in _available_candidates_for_unit(target_kind, target_value):
+						if not source_cells.has(cell) and not other_cells.has(cell):
+							other_cells.append(cell)
+				if not other_cells.is_empty():
+					return _make_subset_lock_hint(source_names, source_cells, target_kind, target_values, other_cells)
+	return {}
+
+
+func _make_subset_lock_hint(source_names: Array[String], source_cells: Array[Vector2i], target_kind: String, target_values: Array[int], other_cells: Array[Vector2i]) -> Dictionary:
+	var guides := {}
+	for cell in source_cells:
+		guides[cell] = "candidate"
+	for cell in other_cells:
+		guides[cell] = "exclude"
+	var target_names: Array[String] = []
+	for value in target_values:
+		target_names.append(_unit_name_by_kind(target_kind, value))
+	return {
+		"target": other_cells[0],
+		"guides": guides,
+		"message": "%s的皇冠只能落在%s里。因为这些单元彼此占满了这组位置，所以%s中其它橙色候选可以排除。" % ["、".join(source_names), "、".join(target_names), "、".join(target_names)]
+	}
+
+
+func _best_lookahead_exclusion_hint() -> Dictionary:
+	for row in range(int(current_level["rows"])):
+		for col in range(int(current_level["cols"])):
+			var cell := Vector2i(col, row)
+			if not _is_available_candidate(cell):
+				continue
+			var blocked_unit := _blocked_unit_after_assume(cell)
+			if blocked_unit.is_empty():
+				continue
+			var unit_name := _unit_name_by_kind(str(blocked_unit["kind"]), int(blocked_unit["index"]))
+			var guides := {}
+			guides[cell] = "exclude"
+			for peer in _unit_cells_by_kind(str(blocked_unit["kind"]), int(blocked_unit["index"])):
+				if peer != cell:
+					guides[peer] = "unit"
+			return {
+				"target": cell,
+				"guides": guides,
+				"message": "如果第 %d 行第 %d 列放皇冠，%s就没有任何可放位置了。所以这个橙色格一定不是皇冠，可以先标 X。" % [row + 1, col + 1, unit_name]
+			}
+	return {}
+
+
+func _best_exclusion_hint() -> Dictionary:
+	for row in range(int(current_level["rows"])):
+		for col in range(int(current_level["cols"])):
+			var cell := Vector2i(col, row)
+			if cell_states[row][col] != "empty":
+				continue
+			var reason := _first_conflict_reason(cell)
+			if reason == "":
+				continue
+			var guides := {}
+			guides[cell] = "exclude"
+			for piece in _piece_positions():
+				if _piece_conflicts_with_cell(piece, cell):
+					guides[piece] = "place"
+					break
+			return {
+				"target": cell,
+				"guides": guides,
+				"message": "第 %d 行第 %d 列可以排除：%s。这个格不可能放皇冠，先标 X 能减少后面的候选。" % [row + 1, col + 1, reason]
+			}
+	return {}
+
+
+func _best_candidate_focus_hint() -> Dictionary:
+	var best := Vector2i(-1, -1)
+	var best_score := 999
+	for row in range(int(current_level["rows"])):
+		for col in range(int(current_level["cols"])):
+			var cell := Vector2i(col, row)
+			if not _is_available_candidate(cell):
+				continue
+			var score := _available_candidates_in_row(row).size() + _available_candidates_in_col(col).size() + _available_candidates_in_region(int(current_level["regions"][row][col])).size()
+			if score < best_score:
+				best_score = score
+				best = cell
+	if best.x < 0:
+		return {}
+	var region_id := int(current_level["regions"][best.y][best.x])
+	var guides := {}
+	for cell in _row_cells(best.y):
+		guides[cell] = "unit"
+	for cell in _available_candidates_in_row(best.y):
+		guides[cell] = "candidate"
+	guides[best] = "place"
+	return {
+		"target": best,
+		"guides": guides,
+		"message": "当前没有唯一答案，但第 %d 行第 %d 列最值得优先比较：它所在行剩 %d 个候选，列剩 %d 个候选，%s剩 %d 个候选。先围绕这些候选继续排除。" % [best.y + 1, best.x + 1, _available_candidates_in_row(best.y).size(), _available_candidates_in_col(best.x).size(), _region_name(region_id), _available_candidates_in_region(region_id).size()]
+	}
+
+
+func _guides_for_unit(unit_cells: Array[Vector2i], candidates: Array[Vector2i], exclusions: Array[Dictionary]) -> Dictionary:
+	var guides := {}
+	for cell in unit_cells:
+		guides[cell] = "unit"
+	for item in exclusions:
+		guides[item["cell"]] = "exclude"
+	for cell in candidates:
+		guides[cell] = "candidate"
+	return guides
+
+
+func _exclusion_summary(exclusions: Array[Dictionary]) -> String:
+	var blocked := 0
+	var occupied := 0
+	var conflict := 0
+	for item in exclusions:
+		var reason := str(item["reason"])
+		if reason == "已标 X":
+			blocked += 1
+		elif reason == "已有皇冠":
+			occupied += 1
+		else:
+			conflict += 1
+	var parts: Array[String] = []
+	if blocked > 0:
+		parts.append("%d 个已被你标 X" % blocked)
+	if occupied > 0:
+		parts.append("%d 个已经有皇冠" % occupied)
+	if conflict > 0:
+		parts.append("%d 个会和已有皇冠冲突" % conflict)
+	if parts.is_empty():
+		return "其它格都不适合"
+	return "其它格中：" + "，".join(parts)
+
+
+func _first_exclusion_detail(exclusions: Array[Dictionary]) -> String:
+	for item in exclusions:
+		var reason := str(item["reason"])
+		if reason != "已标 X" and reason != "已有皇冠":
+			var cell: Vector2i = item["cell"]
+			return "第 %d 行第 %d 列被排除，因为%s" % [cell.y + 1, cell.x + 1, reason]
+	return ""
+
+
+func _piece_conflicts_with_cell(piece: Vector2i, cell: Vector2i) -> bool:
+	return piece.y == cell.y or piece.x == cell.x or int(current_level["regions"][piece.y][piece.x]) == int(current_level["regions"][cell.y][cell.x]) or (absi(piece.x - cell.x) <= 1 and absi(piece.y - cell.y) <= 1)
+
+
+func _region_name(region_id: int) -> String:
+	var index := region_id - 1
+	if index >= 0 and index < REGION_COLOR_NAMES.size():
+		return "%s区域" % REGION_COLOR_NAMES[index]
+	return "这个颜色区域"
+
+
+func _shared_region(cells: Array[Vector2i]) -> int:
+	if cells.is_empty():
+		return -1
+	var region_id := int(current_level["regions"][cells[0].y][cells[0].x])
+	for cell in cells:
+		if int(current_level["regions"][cell.y][cell.x]) != region_id:
+			return -1
+	return region_id
+
+
+func _shared_row(cells: Array[Vector2i]) -> int:
+	if cells.is_empty():
+		return -1
+	var row := cells[0].y
+	for cell in cells:
+		if cell.y != row:
+			return -1
+	return row
+
+
+func _shared_col(cells: Array[Vector2i]) -> int:
+	if cells.is_empty():
+		return -1
+	var col := cells[0].x
+	for cell in cells:
+		if cell.x != col:
+			return -1
+	return col
+
+
+func _candidate_cells_except(cells: Array[Vector2i], excluded: Array[Vector2i]) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for cell in cells:
+		if not excluded.has(cell):
+			result.append(cell)
+	return result
+
+
+func _open_unit_candidates(kind: String) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for index in _unit_indices_by_kind(kind):
+		if _unit_has_piece(kind, index):
+			continue
+		var candidates := _available_candidates_for_unit(kind, index)
+		if candidates.size() > 1:
+			result.append({
+				"index": index,
+				"name": _unit_name_by_kind(kind, index),
+				"candidates": candidates
+			})
+	return result
+
+
+func _available_candidates_for_unit(kind: String, index: int) -> Array[Vector2i]:
+	match kind:
+		"row":
+			return _available_candidates_in_row(index)
+		"col":
+			return _available_candidates_in_col(index)
+		"region":
+			return _available_candidates_in_region(index)
+		_:
+			return []
+
+
+func _unit_indices_by_kind(kind: String) -> Array[int]:
+	var result: Array[int] = []
+	match kind:
+		"row":
+			for row in range(int(current_level["rows"])):
+				result.append(row)
+		"col":
+			for col in range(int(current_level["cols"])):
+				result.append(col)
+		"region":
+			return _region_ids()
+	return result
+
+
+func _unit_has_piece(kind: String, index: int) -> bool:
+	match kind:
+		"row":
+			return _row_has_piece(index)
+		"col":
+			return _col_has_piece(index)
+		"region":
+			return _region_has_piece(index)
+		_:
+			return false
+
+
+func _unit_name_by_kind(kind: String, index: int) -> String:
+	match kind:
+		"row":
+			return "第 %d 行" % [index + 1]
+		"col":
+			return "第 %d 列" % [index + 1]
+		"region":
+			return _region_name(index)
+		_:
+			return "这个单元"
+
+
+func _unit_cells_by_kind(kind: String, index: int) -> Array[Vector2i]:
+	match kind:
+		"row":
+			return _row_cells(index)
+		"col":
+			return _col_cells(index)
+		"region":
+			return _region_cells(index)
+		_:
+			return []
+
+
+func _cell_unit_value(cell: Vector2i, kind: String) -> int:
+	match kind:
+		"row":
+			return cell.y
+		"col":
+			return cell.x
+		"region":
+			return int(current_level["regions"][cell.y][cell.x])
+		_:
+			return -1
+
+
+func _unit_index_combinations(count: int, group_size: int) -> Array[Array]:
+	var result: Array[Array] = []
+	if group_size == 2:
+		for a in range(count):
+			for b in range(a + 1, count):
+				result.append([a, b])
+	elif group_size == 3:
+		for a in range(count):
+			for b in range(a + 1, count):
+				for c in range(b + 1, count):
+					result.append([a, b, c])
+	return result
+
+
+func _blocked_unit_after_assume(cell: Vector2i) -> Dictionary:
+	var kinds := ["row", "col", "region"]
+	for kind in kinds:
+		for index in _unit_indices_by_kind(kind):
+			if _unit_has_piece_after_assume(kind, index, cell):
+				continue
+			var has_candidate := false
+			for unit_cell in _unit_cells_by_kind(kind, index):
+				if _is_available_after_assume(unit_cell, cell):
+					has_candidate = true
+					break
+			if not has_candidate:
+				return {"kind": kind, "index": index}
+	return {}
+
+
+func _unit_has_piece_after_assume(kind: String, index: int, assumed: Vector2i) -> bool:
+	if _cell_unit_value(assumed, kind) == index:
+		return true
+	return _unit_has_piece(kind, index)
+
+
+func _is_available_after_assume(position: Vector2i, assumed: Vector2i) -> bool:
+	if position == assumed:
+		return false
+	if not _is_available_candidate(position):
+		return false
+	if position.y == assumed.y or position.x == assumed.x:
+		return false
+	if int(current_level["regions"][position.y][position.x]) == int(current_level["regions"][assumed.y][assumed.x]):
+		return false
+	if absi(position.x - assumed.x) <= 1 and absi(position.y - assumed.y) <= 1:
+		return false
+	return true
+
+
+func _select_prepared_hint_step() -> Dictionary:
+	var steps: Array = current_level.get("hintSteps", [])
+	for raw_step in steps:
+		var step: Dictionary = raw_step
+		if _hint_step_still_relevant(step):
+			return step
+	var fallback := _build_teaching_hint()
+	if fallback.is_empty():
+		return {}
+	return {
+		"target": [fallback["target"].y, fallback["target"].x],
+		"unit": "row",
+		"unitIndex": fallback["target"].y,
+		"title": "观察第 %d 行" % [fallback["target"].y + 1],
+		"technique": "候选排除"
+	}
+
+
+func _hint_step_still_relevant(step: Dictionary) -> bool:
+	if step.is_empty() or not step.has("target"):
+		return false
+	var target := _step_target(step)
+	if target.x < 0:
+		return false
+	var state: String = cell_states[target.y][target.x]
+	return state != "piece" and state != "hint"
+
+
+func _build_staged_hint(step: Dictionary, stage: int) -> Dictionary:
+	if step.is_empty():
+		return _build_teaching_hint()
+	var target := _step_target(step)
+	var unit_cells := _step_unit_cells(step)
+	if unit_cells.is_empty():
+		return _build_teaching_hint()
+
+	var unit_name := _step_unit_name(step)
+	var candidates := _available_candidates_in_cells(unit_cells)
+	var exclusions := _excluded_cells_in_cells(unit_cells)
+	var stage_number := clampi(stage + 1, 1, 3)
+
+	if stage_number == 1:
+		var guides := {}
+		for cell in unit_cells:
+			guides[cell] = "unit"
+		return {
+			"stage": stage_number,
+			"target": target,
+			"guides": guides,
+			"message": "提示 1/3：先看%s。这个单元最终需要 1 个皇冠，先不要急着放，先找哪些格子还可能成为候选。" % unit_name
+		}
+
+	if stage_number == 2:
+		var guides := {}
+		for cell in candidates:
+			guides[cell] = "candidate"
+		for item in exclusions:
+			guides[item["cell"]] = "exclude"
+		return {
+			"stage": stage_number,
+			"target": target if candidates.has(target) else Vector2i(-1, -1),
+			"guides": guides,
+			"message": _candidate_breakdown_message(unit_name, candidates, exclusions, unit_cells)
+		}
+
+	var final_guides := {}
+	var final_target := target
+	if candidates.size() == 1:
+		final_target = candidates[0]
+		final_guides[final_target] = "place"
+		return {
+			"stage": stage_number,
+			"target": final_target,
+			"guides": final_guides,
+			"message": "%s现在只剩 1 个合法候选：第 %d 行第 %d 列。原因是其它格已经被 X、已有皇冠或冲突规则排除了。" % [unit_name, final_target.y + 1, final_target.x + 1]
+		}
+	if candidates.has(target):
+		final_guides[target] = "place"
+		return {
+			"stage": stage_number,
+			"target": target,
+			"guides": final_guides,
+			"message": "%s还剩 %d 个候选。绿色格是预设解题路径中的下一步候选，但现在还需要你结合其它行、列或颜色区域继续验证。" % [unit_name, candidates.size()]
+		}
+	if not candidates.is_empty():
+		final_target = candidates[0]
+		final_guides[final_target] = "candidate"
+		return {
+			"stage": stage_number,
+			"target": final_target,
+			"guides": final_guides,
+			"message": "%s的原提示位置已经不适合当前棋盘。先从这个仍合法的候选继续分析。" % unit_name
+		}
+	return _build_teaching_hint()
+
+
+func _step_target(step: Dictionary) -> Vector2i:
+	var target: Array = step.get("target", [])
+	if target.size() < 2:
+		return Vector2i(-1, -1)
+	return Vector2i(int(target[1]), int(target[0]))
+
+
+func _step_unit_cells(step: Dictionary) -> Array[Vector2i]:
+	var unit := str(step.get("unit", "row"))
+	var unit_index := int(step.get("unitIndex", 0))
+	match unit:
+		"row":
+			return _row_cells(unit_index)
+		"col":
+			return _col_cells(unit_index)
+		"region":
+			return _region_cells(unit_index)
+		_:
+			return _row_cells(_step_target(step).y)
+
+
+func _step_unit_name(step: Dictionary) -> String:
+	var unit := str(step.get("unit", "row"))
+	var unit_index := int(step.get("unitIndex", 0))
+	match unit:
+		"row":
+			return "第 %d 行" % [unit_index + 1]
+		"col":
+			return "第 %d 列" % [unit_index + 1]
+		"region":
+			return _region_name(unit_index)
+		_:
+			return "这个单元"
+
+
+func _available_candidates_in_cells(cells: Array[Vector2i]) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for cell in cells:
+		if _is_available_candidate(cell):
+			result.append(cell)
+	return result
+
+
+func _excluded_cells_in_cells(cells: Array[Vector2i]) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for cell in cells:
+		var state: String = cell_states[cell.y][cell.x]
+		if state == "blocked":
+			result.append({"cell": cell, "reason": "已标 X"})
+		elif state == "piece" or state == "hint":
+			result.append({"cell": cell, "reason": "已有皇冠"})
+		else:
+			var reason := _first_conflict_reason(cell)
+			if reason != "":
+				result.append({"cell": cell, "reason": reason})
+	return result
+
+
+func _candidate_breakdown_message(unit_name: String, candidates: Array[Vector2i], exclusions: Array[Dictionary], unit_cells: Array[Vector2i]) -> String:
+	var blocked := 0
+	var occupied := 0
+	var conflict := 0
+	for item in exclusions:
+		var reason := str(item["reason"])
+		if reason == "已标 X":
+			blocked += 1
+		elif reason == "已有皇冠":
+			occupied += 1
+		else:
+			conflict += 1
+	var reasons: Array[String] = []
+	if blocked > 0:
+		reasons.append("%d 个已被你标 X" % blocked)
+	if occupied > 0:
+		reasons.append("%d 个已有皇冠" % occupied)
+	if conflict > 0:
+		reasons.append("%d 个会和已有皇冠冲突" % conflict)
+	var reason_text := "目前没有明确排除格"
+	if not reasons.is_empty():
+		reason_text = "已经排除：" + "，".join(reasons)
+	return "提示 2/3：%s共有 %d 格，%s；还剩 %d 个绿色候选。先比较这些候选的列和颜色区域。" % [unit_name, unit_cells.size(), reason_text, candidates.size()]
+
+
 func _build_teaching_hint() -> Dictionary:
 	var rows := int(current_level["rows"])
 	var cols := int(current_level["cols"])
@@ -897,7 +1591,7 @@ func _build_teaching_hint() -> Dictionary:
 			return {
 				"kind": "place",
 				"target": position,
-				"message": _single_candidate_message("这个颜色区域", position, _region_cells(region_id))
+				"message": _single_candidate_message(_region_name(region_id), position, _region_cells(region_id))
 			}
 
 	var exclusion_hint := _build_exclusion_hint()
@@ -946,7 +1640,7 @@ func _build_candidate_hint() -> Dictionary:
 	return {
 		"kind": "place",
 		"target": best,
-		"message": "绿色格目前仍是合法候选：第 %d 行还有 %d 个候选，第 %d 列还有 %d 个候选，这个颜色区域还有 %d 个候选。它还不能确定，但值得重点比较。" % [best.y + 1, _available_candidates_in_row(best.y).size(), best.x + 1, _available_candidates_in_col(best.x).size(), _available_candidates_in_region(region_id).size()]
+		"message": "绿色格目前仍是合法候选：第 %d 行还有 %d 个候选，第 %d 列还有 %d 个候选，%s还有 %d 个候选。它还不能确定，但值得重点比较。" % [best.y + 1, _available_candidates_in_row(best.y).size(), best.x + 1, _available_candidates_in_col(best.x).size(), _region_name(region_id), _available_candidates_in_region(region_id).size()]
 	}
 
 
@@ -1016,7 +1710,7 @@ func _first_conflict_reason(position: Vector2i) -> String:
 		if piece.x == position.x:
 			return "它和第 %d 行第 %d 列的皇冠在同一列" % [piece.y + 1, piece.x + 1]
 		if int(current_level["regions"][piece.y][piece.x]) == int(current_level["regions"][position.y][position.x]):
-			return "它和第 %d 行第 %d 列的皇冠在同一个颜色区域" % [piece.y + 1, piece.x + 1]
+			return "它和第 %d 行第 %d 列的皇冠都在%s" % [piece.y + 1, piece.x + 1, _region_name(int(current_level["regions"][position.y][position.x]))]
 		if absi(piece.x - position.x) <= 1 and absi(piece.y - position.y) <= 1:
 			return "它和第 %d 行第 %d 列的皇冠相邻" % [piece.y + 1, piece.x + 1]
 	return ""
