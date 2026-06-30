@@ -21,6 +21,9 @@ func _run() -> void:
 	await process_frame
 
 	assert(game.levels.size() >= 50, "MVP should include 50 default levels")
+	assert(game.home_screen != null and game.home_screen.visible, "Game should open on the home screen")
+	game._show_game()
+	await process_frame
 	assert(game.board != null and game.board.size.x >= 400.0, "Board must render at a mobile-friendly size")
 
 	for level in game.levels:
@@ -45,7 +48,8 @@ func _run() -> void:
 	var coins_before: int = game.coin_count
 	var hints_before: int = game.hint_count
 	game._use_hint()
-	assert(game._piece_positions().size() == 1, "Hint must place a correct piece")
+	assert(game._piece_positions().is_empty(), "Hint should teach without placing a piece")
+	assert(game.board.guide_cells.size() == 1, "Hint must highlight one candidate cell")
 	assert(game.hint_count == hints_before - 1, "Hint must consume one available use")
 	assert(game.coin_count == coins_before, "Free hint uses must not charge coins")
 

@@ -38,10 +38,20 @@ var resume_level_id := -1
 var resume_states: Array = []
 var resume_completed := false
 
+var home_screen: Control
+var game_screen: Control
+var home_coin_label: Label
+var home_heart_label: Label
+var home_star_label: Label
+var home_level_label: Label
+var home_area_label: Label
+var home_progress_bar: ProgressBar
+var home_progress_label: Label
+var home_start_button: Button
+var home_chest_label: Label
 var board
 var level_picker: OptionButton
 var level_label: Label
-var level_name_label: Label
 var coin_label: Label
 var progress_bar: ProgressBar
 var progress_label: Label
@@ -66,6 +76,7 @@ func _ready() -> void:
 	_build_ui()
 	current_level_index = clampi(current_level_index, 0, levels.size() - 1)
 	_load_level(current_level_index, true)
+	_show_home()
 
 
 func _build_ui() -> void:
@@ -75,16 +86,385 @@ func _build_ui() -> void:
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background)
 
+	home_screen = _build_home_screen()
+	add_child(home_screen)
+
+	game_screen = _build_game_screen()
+	add_child(game_screen)
+
+	_build_completion_overlay()
+	_build_toast()
+	_build_help_dialog()
+
+
+func _build_home_screen() -> Control:
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var sky := ColorRect.new()
+	sky.color = Color("#75D8FF")
+	sky.set_anchor(SIDE_RIGHT, 1.0)
+	sky.set_anchor(SIDE_BOTTOM, 0.48)
+	root.add_child(sky)
+
+	var garden := ColorRect.new()
+	garden.color = Color("#75CF57")
+	garden.set_anchor(SIDE_TOP, 0.48)
+	garden.set_anchor(SIDE_RIGHT, 1.0)
+	garden.set_anchor(SIDE_BOTTOM, 1.0)
+	root.add_child(garden)
+
+	var lake := ColorRect.new()
+	lake.color = Color("#45BEE8")
+	lake.set_anchor(SIDE_LEFT, 0.0)
+	lake.set_anchor(SIDE_TOP, 0.38)
+	lake.set_anchor(SIDE_RIGHT, 1.0)
+	lake.set_anchor(SIDE_BOTTOM, 0.50)
+	root.add_child(lake)
+
+	var path := ColorRect.new()
+	path.color = Color("#D9B061")
+	path.set_anchor(SIDE_LEFT, 0.43)
+	path.set_anchor(SIDE_TOP, 0.45)
+	path.set_anchor(SIDE_RIGHT, 0.57)
+	path.set_anchor(SIDE_BOTTOM, 0.77)
+	root.add_child(path)
+
+	root.add_child(_build_home_top_resources())
+	root.add_child(_build_home_castle())
+	root.add_child(_build_home_side_buttons())
+	root.add_child(_build_home_primary_buttons())
+	root.add_child(_build_home_bottom_nav())
+	return root
+
+
+func _build_home_top_resources() -> Control:
+	var bar := HBoxContainer.new()
+	bar.set_anchor(SIDE_LEFT, 0.0)
+	bar.set_anchor(SIDE_RIGHT, 1.0)
+	bar.offset_left = 18
+	bar.offset_top = 18
+	bar.offset_right = -18
+	bar.offset_bottom = 62
+	bar.add_theme_constant_override("separation", 8)
+
+	home_coin_label = _resource_label("●  %d" % coin_count, Color("#E6A63A"))
+	bar.add_child(home_coin_label)
+
+	home_heart_label = _resource_label("♥  3", Color("#F06B78"))
+	bar.add_child(home_heart_label)
+
+	home_star_label = _resource_label("★  %d" % completed_levels.size(), Color("#5D74D9"))
+	bar.add_child(home_star_label)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(spacer)
+
+	var settings := _small_button("⚙")
+	settings.tooltip_text = "设置"
+	settings.pressed.connect(_on_settings)
+	bar.add_child(settings)
+	return bar
+
+
+func _build_home_castle() -> Control:
+	var castle := VBoxContainer.new()
+	castle.set_anchor(SIDE_LEFT, 0.08)
+	castle.set_anchor(SIDE_TOP, 0.09)
+	castle.set_anchor(SIDE_RIGHT, 0.92)
+	castle.set_anchor(SIDE_BOTTOM, 0.47)
+	castle.add_theme_constant_override("separation", 4)
+
+	var title := Label.new()
+	title.text = "Color Queens"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_color", Color("#FFFFFF"))
+	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.28))
+	title.add_theme_constant_override("shadow_offset_x", 0)
+	title.add_theme_constant_override("shadow_offset_y", 3)
+	title.add_theme_font_size_override("font_size", 34)
+	castle.add_child(title)
+
+	var castle_body := Label.new()
+	castle_body.text = "♛\n▟▙  ▟▙\n▛▜▛▜"
+	castle_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	castle_body.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	castle_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	castle_body.add_theme_color_override("font_color", Color("#5A6FA7"))
+	castle_body.add_theme_color_override("font_shadow_color", Color(1.0, 1.0, 1.0, 0.65))
+	castle_body.add_theme_constant_override("shadow_offset_x", 0)
+	castle_body.add_theme_constant_override("shadow_offset_y", 4)
+	castle_body.add_theme_font_size_override("font_size", 58)
+	castle.add_child(castle_body)
+
+	home_area_label = Label.new()
+	home_area_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	home_area_label.add_theme_color_override("font_color", Color("#254165"))
+	home_area_label.add_theme_font_size_override("font_size", 17)
+	castle.add_child(home_area_label)
+	return castle
+
+
+func _build_home_side_buttons() -> Control:
+	var layer := Control.new()
+	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var daily := _floating_home_button("礼")
+	daily.position = Vector2(18, 114)
+	daily.tooltip_text = "每日奖励"
+	daily.pressed.connect(func() -> void:
+		coin_count += 10
+		_update_coin_label()
+		_update_home()
+		_save_game()
+		_show_toast("每日奖励：金币 +10")
+	)
+	layer.add_child(daily)
+
+	var chest := _floating_home_button("箱")
+	chest.position = Vector2(18, 176)
+	chest.tooltip_text = "宝箱"
+	chest.pressed.connect(func() -> void: _show_toast("继续通关，皇冠宝箱即将开启"))
+	layer.add_child(chest)
+
+	var editor := _floating_home_button("编")
+	editor.position = Vector2(18, 238)
+	editor.tooltip_text = "关卡编辑器"
+	editor.pressed.connect(_open_level_editor)
+	layer.add_child(editor)
+
+	var event := _floating_home_button("!")
+	event.set_anchor(SIDE_LEFT, 1.0)
+	event.set_anchor(SIDE_RIGHT, 1.0)
+	event.offset_left = -70
+	event.offset_top = 136
+	event.offset_right = -18
+	event.offset_bottom = 188
+	event.tooltip_text = "活动"
+	event.pressed.connect(func() -> void: _show_toast("活动将在后续版本开放"))
+	layer.add_child(event)
+
+	var rank := _floating_home_button("榜")
+	rank.set_anchor(SIDE_LEFT, 1.0)
+	rank.set_anchor(SIDE_RIGHT, 1.0)
+	rank.offset_left = -70
+	rank.offset_top = 198
+	rank.offset_right = -18
+	rank.offset_bottom = 250
+	rank.tooltip_text = "排行榜"
+	rank.pressed.connect(func() -> void: _show_toast("排行榜将在后续版本开放"))
+	layer.add_child(rank)
+	return layer
+
+
+func _build_home_primary_buttons() -> Control:
+	var row := HBoxContainer.new()
+	row.set_anchor(SIDE_LEFT, 0.0)
+	row.set_anchor(SIDE_TOP, 0.70)
+	row.set_anchor(SIDE_RIGHT, 1.0)
+	row.set_anchor(SIDE_BOTTOM, 0.80)
+	row.offset_left = 18
+	row.offset_right = -18
+	row.add_theme_constant_override("separation", 12)
+
+	home_start_button = _royal_home_button("开始关卡", Color("#28A83C"))
+	home_start_button.pressed.connect(_show_game)
+	row.add_child(home_start_button)
+
+	var tasks := _royal_home_button("任务", Color("#F2A51E"))
+	tasks.pressed.connect(func() -> void: _show_toast("完成关卡，修复皇冠花园"))
+	row.add_child(tasks)
+	return row
+
+
+func _build_home_bottom_nav() -> Control:
+	var panel := PanelContainer.new()
+	panel.set_anchor(SIDE_TOP, 1.0)
+	panel.set_anchor(SIDE_RIGHT, 1.0)
+	panel.set_anchor(SIDE_BOTTOM, 1.0)
+	panel.offset_top = -78
+	panel.add_theme_stylebox_override("panel", _button_style(Color("#1679D4"), 0))
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	panel.add_child(row)
+
+	row.add_child(_nav_button("★", "星"))
+	row.add_child(_nav_button("杯", "杯"))
+
+	var home := _nav_button("城", "主页")
+	home.disabled = true
+	row.add_child(home)
+
+	row.add_child(_nav_button("队", "队"))
+	row.add_child(_nav_button("⚙", "设"))
+	return panel
+
+
+func _build_home_resource_bar() -> Control:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size.y = 58
+	row.add_theme_constant_override("separation", 8)
+
+	home_coin_label = _resource_label("●  %d" % coin_count, Color("#E6A63A"))
+	row.add_child(home_coin_label)
+
+	home_heart_label = _resource_label("♥  3", Color("#F06B78"))
+	row.add_child(home_heart_label)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
+
+	var settings := _small_button("⚙")
+	settings.tooltip_text = "设置"
+	settings.pressed.connect(_on_settings)
+	row.add_child(settings)
+
+	var editor := _small_button("编")
+	editor.tooltip_text = "关卡编辑器"
+	editor.pressed.connect(_open_level_editor)
+	row.add_child(editor)
+	return row
+
+
+func _build_home_hero() -> Control:
+	var panel := PanelContainer.new()
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.custom_minimum_size.y = 410
+	panel.add_theme_stylebox_override("panel", _card_style(Color("#DDEFFD"), 24, true, 18))
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 12)
+	panel.add_child(column)
+
+	var title := Label.new()
+	title.text = "Color Queens"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_color", INK)
+	title.add_theme_font_size_override("font_size", 36)
+	column.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.text = "皇冠花园"
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_color_override("font_color", Color("#52627A"))
+	subtitle.add_theme_font_size_override("font_size", 18)
+	column.add_child(subtitle)
+
+	var castle := Label.new()
+	castle.text = "♛\n▟▙  ▟▙\n▛▜▛▜"
+	castle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	castle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	castle.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	castle.add_theme_color_override("font_color", Color("#385B86"))
+	castle.add_theme_font_size_override("font_size", 54)
+	column.add_child(castle)
+
+	home_area_label = Label.new()
+	home_area_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	home_area_label.add_theme_color_override("font_color", Color("#385B86"))
+	home_area_label.add_theme_font_size_override("font_size", 18)
+	column.add_child(home_area_label)
+	return panel
+
+
+func _build_home_progress() -> Control:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size.y = 86
+	panel.add_theme_stylebox_override("panel", _card_style(CARD, 18, true, 14))
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 8)
+	panel.add_child(column)
+
+	home_level_label = Label.new()
+	home_level_label.add_theme_color_override("font_color", INK)
+	home_level_label.add_theme_font_size_override("font_size", 19)
+	column.add_child(home_level_label)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	column.add_child(row)
+
+	home_progress_bar = ProgressBar.new()
+	home_progress_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	home_progress_bar.custom_minimum_size.y = 22
+	home_progress_bar.show_percentage = false
+	home_progress_bar.add_theme_stylebox_override("background", _button_style(Color("#E8E3DB"), 11))
+	home_progress_bar.add_theme_stylebox_override("fill", _button_style(Color("#48B985"), 11))
+	row.add_child(home_progress_bar)
+
+	home_progress_label = Label.new()
+	home_progress_label.custom_minimum_size.x = 70
+	home_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	home_progress_label.add_theme_color_override("font_color", MUTED)
+	home_progress_label.add_theme_font_size_override("font_size", 15)
+	row.add_child(home_progress_label)
+	return panel
+
+
+func _build_home_actions() -> Control:
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+
+	home_start_button = _action_button("开始关卡", Color("#FFB84E"))
+	home_start_button.custom_minimum_size.y = 66
+	home_start_button.add_theme_font_size_override("font_size", 23)
+	home_start_button.pressed.connect(_show_game)
+	column.add_child(home_start_button)
+
+	var row := HBoxContainer.new()
+	row.custom_minimum_size.y = 70
+	row.add_theme_constant_override("separation", 10)
+	column.add_child(row)
+
+	var daily := _action_button("每日奖励", Color("#FFFFFF"))
+	daily.pressed.connect(func() -> void:
+		coin_count += 10
+		_update_coin_label()
+		_update_home()
+		_save_game()
+		_show_toast("每日奖励：金币 +10")
+	)
+	row.add_child(daily)
+
+	var chest := _action_button("宝箱", Color("#FFFFFF"))
+	chest.pressed.connect(func() -> void: _show_toast("继续通关，皇冠宝箱即将开启"))
+	row.add_child(chest)
+	return column
+
+
+func _build_home_nav() -> Control:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size.y = 54
+	row.add_theme_constant_override("separation", 8)
+
+	var home := _action_button("主页", Color("#EAF8F0"))
+	home.disabled = true
+	row.add_child(home)
+
+	var event := _action_button("活动")
+	event.pressed.connect(func() -> void: _show_toast("活动将在后续版本开放"))
+	row.add_child(event)
+
+	var shop := _action_button("商店")
+	shop.pressed.connect(func() -> void: _show_toast("商店将在后续版本开放"))
+	row.add_child(shop)
+	return row
+
+
+func _build_game_screen() -> Control:
 	var safe_margin := MarginContainer.new()
 	safe_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	safe_margin.add_theme_constant_override("margin_left", 22)
-	safe_margin.add_theme_constant_override("margin_right", 22)
-	safe_margin.add_theme_constant_override("margin_top", 20)
-	safe_margin.add_theme_constant_override("margin_bottom", 16)
-	add_child(safe_margin)
+	safe_margin.add_theme_constant_override("margin_left", 12)
+	safe_margin.add_theme_constant_override("margin_right", 12)
+	safe_margin.add_theme_constant_override("margin_top", 16)
+	safe_margin.add_theme_constant_override("margin_bottom", 12)
 
 	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 10)
+	content.add_theme_constant_override("separation", 8)
 	safe_margin.add_child(content)
 
 	content.add_child(_build_top_bar())
@@ -100,79 +480,58 @@ func _build_ui() -> void:
 
 	content.add_child(_build_action_bar())
 	content.add_child(_build_ad_placeholder())
-
-	_build_completion_overlay()
-	_build_toast()
-	_build_help_dialog()
+	return safe_margin
 
 
 func _build_top_bar() -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size.y = 66
-	panel.add_theme_stylebox_override("panel", _card_style(CARD, 22, true))
+	panel.custom_minimum_size.y = 60
+	panel.add_theme_stylebox_override("panel", _card_style(CARD, 18, true))
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_right", 8)
 	margin.add_theme_constant_override("margin_top", 8)
 	margin.add_theme_constant_override("margin_bottom", 8)
 	panel.add_child(margin)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 7)
+	row.add_theme_constant_override("separation", 5)
 	margin.add_child(row)
 
-	coin_label = Label.new()
-	coin_label.text = "●  %d" % coin_count
-	coin_label.add_theme_color_override("font_color", Color("#E6A63A"))
-	coin_label.add_theme_font_size_override("font_size", 20)
-	coin_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(coin_label)
-
-	var plus_button := _small_button("+")
-	plus_button.tooltip_text = "模拟激励广告奖励"
-	plus_button.add_theme_stylebox_override("normal", _button_style(GREEN, 13))
-	plus_button.add_theme_stylebox_override("hover", _button_style(GREEN.lightened(0.08), 13))
-	plus_button.pressed.connect(_on_coin_plus)
-	row.add_child(plus_button)
+	var home_button := _small_button("⌂")
+	home_button.tooltip_text = "返回首页"
+	home_button.pressed.connect(_show_home)
+	row.add_child(home_button)
 
 	var heart := Label.new()
 	heart.text = "♥  3"
 	heart.add_theme_color_override("font_color", Color("#F06B78"))
-	heart.add_theme_font_size_override("font_size", 19)
+	heart.add_theme_font_size_override("font_size", 17)
+	heart.custom_minimum_size.x = 42
 	heart.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(heart)
 
 	level_picker = OptionButton.new()
-	level_picker.custom_minimum_size = Vector2(146, 40)
+	level_picker.custom_minimum_size = Vector2(92, 38)
 	level_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	level_picker.focus_mode = Control.FOCUS_NONE
 	level_picker.tooltip_text = "切换调试关卡"
-	level_picker.add_theme_font_size_override("font_size", 15)
+	level_picker.add_theme_font_size_override("font_size", 13)
 	level_picker.add_theme_color_override("font_color", INK)
 	level_picker.add_theme_stylebox_override("normal", _button_style(Color("#F1F4F7"), 13))
 	level_picker.add_theme_stylebox_override("hover", _button_style(Color("#E7EDF2"), 13))
 	level_picker.add_theme_stylebox_override("pressed", _button_style(Color("#DDE5EC"), 13))
 	for index in range(levels.size()):
 		var level: Dictionary = levels[index]
-		level_picker.add_item("关卡 %d · %s" % [int(level["levelId"]), str(level.get("name", ""))], index)
+		level_picker.add_item("关卡 %d" % int(level["levelId"]), index)
 	level_picker.item_selected.connect(_on_level_selected)
 	row.add_child(level_picker)
-
-	var rank := _small_button("榜")
-	rank.tooltip_text = "排行榜（预留）"
-	rank.pressed.connect(func() -> void: _show_toast("排行榜将在后续版本开放"))
-	row.add_child(rank)
 
 	var editor := _small_button("编")
 	editor.tooltip_text = "关卡编辑器"
 	editor.pressed.connect(_open_level_editor)
 	row.add_child(editor)
-
-	var theme_button := _small_button("♛")
-	theme_button.tooltip_text = "主题皮肤"
-	theme_button.pressed.connect(func() -> void: _show_toast("已使用默认皇冠主题"))
-	row.add_child(theme_button)
 
 	var settings := _small_button("⚙")
 	settings.tooltip_text = "切换即时纠错"
@@ -190,12 +549,6 @@ func _build_level_header() -> Control:
 	level_label.add_theme_font_size_override("font_size", 27)
 	level_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(level_label)
-
-	level_name_label = Label.new()
-	level_name_label.add_theme_color_override("font_color", MUTED)
-	level_name_label.add_theme_font_size_override("font_size", 16)
-	level_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(level_name_label)
 
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -240,7 +593,7 @@ func _build_progress_row() -> Control:
 
 func _build_coach() -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size.y = 52
+	panel.custom_minimum_size.y = 78
 	panel.add_theme_stylebox_override("panel", _button_style(Color("#FFF0C9"), 16))
 
 	coach_label = Label.new()
@@ -248,7 +601,7 @@ func _build_coach() -> Control:
 	coach_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	coach_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	coach_label.add_theme_color_override("font_color", Color("#72552B"))
-	coach_label.add_theme_font_size_override("font_size", 14)
+	coach_label.add_theme_font_size_override("font_size", 13)
 	panel.add_child(coach_label)
 	return panel
 
@@ -385,13 +738,13 @@ func _load_level(index: int, allow_resume: bool = false) -> void:
 		cell_states = _blank_states(rows, cols)
 
 	level_label.text = "关卡 %d" % int(current_level["levelId"])
-	level_name_label.text = "  ·  %s" % str(current_level.get("name", ""))
 	_update_level_picker()
 	coach_label.text = str(current_level.get("tutorial", "放置全部皇冠，满足四条规则。"))
 	coach_label.add_theme_color_override("font_color", Color("#72552B"))
 	progress_bar.max_value = int(current_level["targetCount"])
 	board.set_level(current_level, cell_states, REGION_COLORS)
 	_validate_and_update(false)
+	_update_home()
 	if is_completed:
 		reward_label.text = "本关已完成 · 继续挑战下一关"
 		completion_overlay.show()
@@ -401,6 +754,7 @@ func _load_level(index: int, allow_resume: bool = false) -> void:
 func _on_cell_pressed(row: int, col: int) -> void:
 	if is_completed:
 		return
+	board.set_guides({})
 	_push_history()
 	var state: String = cell_states[row][col]
 	match state:
@@ -433,6 +787,7 @@ func _clear_board() -> void:
 	_push_history()
 	cell_states = _blank_states(int(current_level["rows"]), int(current_level["cols"]))
 	board.set_states(cell_states)
+	board.set_guides({})
 	_validate_and_update(false)
 	_save_game()
 	_show_toast("棋盘已清空，可撤销恢复")
@@ -442,33 +797,28 @@ func _use_hint() -> void:
 	if is_completed:
 		return
 
-	var target := Vector2i(-1, -1)
-	for coordinate in current_level["solution"]:
-		var row := int(coordinate[0])
-		var col := int(coordinate[1])
-		if cell_states[row][col] != "piece" and cell_states[row][col] != "hint":
-			target = Vector2i(col, row)
-			break
-	if target.x < 0:
-		_show_toast("所有正确位置都已找到")
+	var hint := _build_teaching_hint()
+	if hint.is_empty():
+		_show_toast("当前没有明显可提示的位置")
 		return
 	if hint_count <= 0 and coin_count < HINT_COST:
 		_show_toast("提示次数与金币不足，点顶部 + 可领取演示奖励")
 		return
 
-	_push_history()
 	if hint_count > 0:
 		hint_count -= 1
 	else:
 		coin_count -= HINT_COST
-	cell_states[target.y][target.x] = "hint"
-	board.set_states(cell_states)
+
+	var target: Vector2i = hint["target"]
+	board.set_guides({target: str(hint.get("kind", "place"))})
 	board.play_cell_feedback(target.y, target.x)
+	coach_label.text = str(hint["message"])
+	coach_label.add_theme_color_override("font_color", Color("#23845C"))
 	_update_coin_label()
 	_update_hint_button()
-	_validate_and_update(true)
 	_save_game()
-	_show_toast("提示：已点亮一个正确位置")
+	_show_toast("提示已标出：先理解原因，再自己落子")
 
 
 func _validate_and_update(allow_completion: bool) -> void:
@@ -510,6 +860,222 @@ func _find_conflicts(pieces: Array) -> Dictionary:
 	return result
 
 
+func _build_teaching_hint() -> Dictionary:
+	var rows := int(current_level["rows"])
+	var cols := int(current_level["cols"])
+
+	for row in range(rows):
+		if _row_has_piece(row):
+			continue
+		var row_candidates := _available_candidates_in_row(row)
+		if row_candidates.size() == 1:
+			var position: Vector2i = row_candidates[0]
+			return {
+				"kind": "place",
+				"target": position,
+				"message": _single_candidate_message("第 %d 行" % [row + 1], position, _row_cells(row))
+			}
+
+	for col in range(cols):
+		if _col_has_piece(col):
+			continue
+		var col_candidates := _available_candidates_in_col(col)
+		if col_candidates.size() == 1:
+			var position: Vector2i = col_candidates[0]
+			return {
+				"kind": "place",
+				"target": position,
+				"message": _single_candidate_message("第 %d 列" % [col + 1], position, _col_cells(col))
+			}
+
+	for region_id in _region_ids():
+		if _region_has_piece(region_id):
+			continue
+		var region_candidates := _available_candidates_in_region(region_id)
+		if region_candidates.size() == 1:
+			var position: Vector2i = region_candidates[0]
+			return {
+				"kind": "place",
+				"target": position,
+				"message": _single_candidate_message("这个颜色区域", position, _region_cells(region_id))
+			}
+
+	var exclusion_hint := _build_exclusion_hint()
+	if not exclusion_hint.is_empty():
+		return exclusion_hint
+
+	var fallback := _build_candidate_hint()
+	if not fallback.is_empty():
+		return fallback
+	return {}
+
+
+func _build_exclusion_hint() -> Dictionary:
+	for row in range(int(current_level["rows"])):
+		for col in range(int(current_level["cols"])):
+			if cell_states[row][col] != "empty":
+				continue
+			var reason := _first_conflict_reason(Vector2i(col, row))
+			if reason != "":
+				return {
+					"kind": "exclude",
+					"target": Vector2i(col, row),
+					"message": "橙色格可以排除：%s。点它标记 X，可以缩小候选范围。" % reason
+				}
+	return {}
+
+
+func _build_candidate_hint() -> Dictionary:
+	var best := Vector2i(-1, -1)
+	var best_score := 999
+	for row in range(int(current_level["rows"])):
+		for col in range(int(current_level["cols"])):
+			var position := Vector2i(col, row)
+			if not _is_available_candidate(position):
+				continue
+			var row_count := _available_candidates_in_row(row).size()
+			var col_count := _available_candidates_in_col(col).size()
+			var region_count := _available_candidates_in_region(int(current_level["regions"][row][col])).size()
+			var score := row_count + col_count + region_count
+			if score < best_score:
+				best_score = score
+				best = position
+	if best.x < 0:
+		return {}
+	var region_id := int(current_level["regions"][best.y][best.x])
+	return {
+		"kind": "place",
+		"target": best,
+		"message": "绿色格目前仍是合法候选：第 %d 行还有 %d 个候选，第 %d 列还有 %d 个候选，这个颜色区域还有 %d 个候选。它还不能确定，但值得重点比较。" % [best.y + 1, _available_candidates_in_row(best.y).size(), best.x + 1, _available_candidates_in_col(best.x).size(), _available_candidates_in_region(region_id).size()]
+	}
+
+
+func _single_candidate_message(unit_name: String, position: Vector2i, unit_cells: Array[Vector2i]) -> String:
+	var blocked := 0
+	var conflict := 0
+	var occupied := 0
+	for cell in unit_cells:
+		if cell == position:
+			continue
+		var state: String = cell_states[cell.y][cell.x]
+		if state == "blocked":
+			blocked += 1
+		elif state == "piece" or state == "hint":
+			occupied += 1
+		elif _first_conflict_reason(cell) != "":
+			conflict += 1
+	var reasons: Array[String] = []
+	if blocked > 0:
+		reasons.append("%d 个已被你标 X" % blocked)
+	if conflict > 0:
+		reasons.append("%d 个会和已有皇冠冲突" % conflict)
+	if occupied > 0:
+		reasons.append("%d 个已经有皇冠" % occupied)
+	var reason_text := "其它格都不适合"
+	if not reasons.is_empty():
+		reason_text = "其它格中：" + "，".join(reasons)
+	return "%s还需要一个皇冠。%s；所以只剩第 %d 行第 %d 列。" % [unit_name, reason_text, position.y + 1, position.x + 1]
+
+
+func _available_candidates_in_row(row: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for col in range(int(current_level["cols"])):
+		var position := Vector2i(col, row)
+		if _is_available_candidate(position):
+			result.append(position)
+	return result
+
+
+func _available_candidates_in_col(col: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for row in range(int(current_level["rows"])):
+		var position := Vector2i(col, row)
+		if _is_available_candidate(position):
+			result.append(position)
+	return result
+
+
+func _available_candidates_in_region(region_id: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for cell in _region_cells(region_id):
+		if _is_available_candidate(cell):
+			result.append(cell)
+	return result
+
+
+func _is_available_candidate(position: Vector2i) -> bool:
+	if cell_states[position.y][position.x] != "empty":
+		return false
+	return _first_conflict_reason(position) == ""
+
+
+func _first_conflict_reason(position: Vector2i) -> String:
+	for piece in _piece_positions():
+		if piece.y == position.y:
+			return "它和第 %d 行第 %d 列的皇冠在同一行" % [piece.y + 1, piece.x + 1]
+		if piece.x == position.x:
+			return "它和第 %d 行第 %d 列的皇冠在同一列" % [piece.y + 1, piece.x + 1]
+		if int(current_level["regions"][piece.y][piece.x]) == int(current_level["regions"][position.y][position.x]):
+			return "它和第 %d 行第 %d 列的皇冠在同一个颜色区域" % [piece.y + 1, piece.x + 1]
+		if absi(piece.x - position.x) <= 1 and absi(piece.y - position.y) <= 1:
+			return "它和第 %d 行第 %d 列的皇冠相邻" % [piece.y + 1, piece.x + 1]
+	return ""
+
+
+func _row_cells(row: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for col in range(int(current_level["cols"])):
+		result.append(Vector2i(col, row))
+	return result
+
+
+func _col_cells(col: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for row in range(int(current_level["rows"])):
+		result.append(Vector2i(col, row))
+	return result
+
+
+func _region_cells(region_id: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for row in range(int(current_level["rows"])):
+		for col in range(int(current_level["cols"])):
+			if int(current_level["regions"][row][col]) == region_id:
+				result.append(Vector2i(col, row))
+	return result
+
+
+func _region_ids() -> Array[int]:
+	var result: Array[int] = []
+	for row in current_level["regions"]:
+		for region in row:
+			var region_id := int(region)
+			if not result.has(region_id):
+				result.append(region_id)
+	return result
+
+
+func _row_has_piece(row: int) -> bool:
+	for col in range(int(current_level["cols"])):
+		if cell_states[row][col] == "piece" or cell_states[row][col] == "hint":
+			return true
+	return false
+
+
+func _col_has_piece(col: int) -> bool:
+	for row in range(int(current_level["rows"])):
+		if cell_states[row][col] == "piece" or cell_states[row][col] == "hint":
+			return true
+	return false
+
+
+func _region_has_piece(region_id: int) -> bool:
+	for cell in _region_cells(region_id):
+		if cell_states[cell.y][cell.x] == "piece" or cell_states[cell.y][cell.x] == "hint":
+			return true
+	return false
+
+
 func _piece_positions() -> Array:
 	var result: Array = []
 	for row in range(cell_states.size()):
@@ -537,6 +1103,7 @@ func _complete_level() -> void:
 		reward = WIN_REWARD
 		coin_count += reward
 	_update_coin_label()
+	_update_home()
 	board.play_victory()
 	_save_game()
 	await get_tree().create_timer(0.55).timeout
@@ -564,6 +1131,7 @@ func _replay_level() -> void:
 func _on_coin_plus() -> void:
 	coin_count += 10
 	_update_coin_label()
+	_update_home()
 	_save_game()
 	_show_toast("演示奖励：金币 +10")
 
@@ -586,6 +1154,7 @@ func _on_level_selected(index: int) -> void:
 	if index == current_level_index:
 		return
 	_load_level(index)
+	_show_game()
 	_save_game()
 	_show_toast("已切换到关卡 %d" % int(current_level["levelId"]))
 
@@ -661,6 +1230,8 @@ func _save_game() -> void:
 func _update_coin_label() -> void:
 	if coin_label:
 		coin_label.text = "●  %d" % coin_count
+	if home_coin_label:
+		home_coin_label.text = "●  %d" % coin_count
 
 
 func _update_hint_button() -> void:
@@ -675,6 +1246,56 @@ func _update_hint_button() -> void:
 func _update_level_picker() -> void:
 	if level_picker and level_picker.selected != current_level_index:
 		level_picker.select(current_level_index)
+
+
+func _show_home() -> void:
+	if home_screen:
+		home_screen.show()
+	if game_screen:
+		game_screen.hide()
+	if completion_overlay:
+		completion_overlay.hide()
+	_update_home()
+
+
+func _show_game() -> void:
+	if home_screen:
+		home_screen.hide()
+	if game_screen:
+		game_screen.show()
+	if board:
+		board.queue_redraw()
+
+
+func _update_home() -> void:
+	if not home_screen or levels.is_empty():
+		return
+	var level_id := int(levels[current_level_index]["levelId"])
+	var area_index := int(current_level_index / 10) + 1
+	var area_start := (area_index - 1) * 10
+	var area_end := mini(area_start + 10, levels.size())
+	var area_completed := 0
+	for index in range(area_start, area_end):
+		if completed_levels.has(int(levels[index]["levelId"])):
+			area_completed += 1
+
+	if home_coin_label:
+		home_coin_label.text = "●  %d" % coin_count
+	if home_heart_label:
+		home_heart_label.text = "♥  3"
+	if home_star_label:
+		home_star_label.text = "★  %d" % completed_levels.size()
+	if home_level_label:
+		home_level_label.text = "下一关：%d" % level_id
+	if home_area_label:
+		home_area_label.text = "第 %d 庭院 · 已修复 %d / %d" % [area_index, area_completed, area_end - area_start]
+	if home_progress_bar:
+		home_progress_bar.max_value = area_end - area_start
+		home_progress_bar.value = area_completed
+	if home_progress_label:
+		home_progress_label.text = "%d / %d" % [area_completed, area_end - area_start]
+	if home_start_button:
+		home_start_button.text = "开始第 %d 关" % level_id
 
 
 func _show_toast(message: String) -> void:
@@ -706,6 +1327,61 @@ func _small_button(text: String) -> Button:
 	button.add_theme_stylebox_override("normal", _button_style(Color("#F1F4F7"), 13))
 	button.add_theme_stylebox_override("hover", _button_style(Color("#E7EDF2"), 13))
 	button.add_theme_stylebox_override("pressed", _button_style(Color("#DDE5EC"), 13))
+	return button
+
+
+func _resource_label(text: String, color: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.custom_minimum_size = Vector2(88, 42)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_font_size_override("font_size", 17)
+	label.add_theme_stylebox_override("normal", _card_style(CARD, 18, true, 8))
+	return label
+
+
+func _floating_home_button(text: String) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(52, 52)
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", 20)
+	button.add_theme_color_override("font_color", INK)
+	button.add_theme_stylebox_override("normal", _card_style(Color("#FFFFFF"), 18, true))
+	button.add_theme_stylebox_override("hover", _card_style(Color("#F5F8FC"), 18, true))
+	button.add_theme_stylebox_override("pressed", _button_style(Color("#DFE8F2"), 18))
+	return button
+
+
+func _royal_home_button(text: String, color: Color) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", 24)
+	button.add_theme_color_override("font_color", Color.WHITE)
+	button.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.24))
+	button.add_theme_constant_override("shadow_offset_y", 3)
+	button.add_theme_stylebox_override("normal", _card_style(color, 22, true))
+	button.add_theme_stylebox_override("hover", _card_style(color.lightened(0.08), 22, true))
+	button.add_theme_stylebox_override("pressed", _button_style(color.darkened(0.08), 22))
+	return button
+
+
+func _nav_button(icon: String, label_text: String) -> Button:
+	var button := Button.new()
+	button.text = "%s\n%s" % [icon, label_text]
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", 14)
+	button.add_theme_color_override("font_color", Color.WHITE)
+	button.add_theme_color_override("font_disabled_color", Color("#DCEBFF"))
+	button.add_theme_stylebox_override("normal", _button_style(Color("#2189E6"), 12))
+	button.add_theme_stylebox_override("hover", _button_style(Color("#3297F0"), 12))
+	button.add_theme_stylebox_override("pressed", _button_style(Color("#1069B7"), 12))
+	button.add_theme_stylebox_override("disabled", _button_style(Color("#0F63B1"), 12))
 	return button
 
 

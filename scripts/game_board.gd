@@ -14,6 +14,7 @@ var cols := 6
 var regions: Array = []
 var cell_states: Array = []
 var error_cells: Dictionary = {}
+var guide_cells: Dictionary = {}
 var region_colors: Array = []
 var piece_symbol := "♛"
 var pulse_cell := Vector2i(-1, -1)
@@ -23,7 +24,7 @@ var victory_strength := 0.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	custom_minimum_size = Vector2(420, 420)
+	custom_minimum_size = Vector2(300, 300)
 	resized.connect(queue_redraw)
 
 
@@ -34,6 +35,7 @@ func set_level(level: Dictionary, states: Array, colors: Array) -> void:
 	cell_states = states
 	region_colors = colors
 	error_cells.clear()
+	guide_cells.clear()
 	victory_strength = 0.0
 	queue_redraw()
 
@@ -45,6 +47,11 @@ func set_states(states: Array) -> void:
 
 func set_errors(errors: Dictionary) -> void:
 	error_cells = errors
+	queue_redraw()
+
+
+func set_guides(guides: Dictionary) -> void:
+	guide_cells = guides
 	queue_redraw()
 
 
@@ -125,6 +132,8 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 	var color: Color = region_colors[region_id % region_colors.size()]
 	if error_cells.has(cell_key):
 		color = color.lerp(Color("#FF5E67"), 0.58)
+	elif guide_cells.has(cell_key):
+		color = color.lerp(Color.WHITE, 0.38)
 	elif victory_strength > 0.0:
 		color = color.lerp(Color.WHITE, victory_strength * 0.32)
 
@@ -137,6 +146,9 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 	if error_cells.has(cell_key):
 		box.border_color = Color("#D92F42")
 		box.set_border_width_all(maxi(2, int(cell_size * 0.04)))
+	elif guide_cells.has(cell_key):
+		box.border_color = Color("#23845C") if _guide_kind(cell_key) == "place" else Color("#D98A24")
+		box.set_border_width_all(maxi(3, int(cell_size * 0.055)))
 	draw_style_box(box, rect)
 
 	var state: String = cell_states[row][col]
@@ -144,6 +156,14 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 		_draw_piece(rect, cell_size, state == HINT_MARK)
 	elif state == BLOCKED_MARK:
 		_draw_blocked(rect, cell_size)
+
+	if guide_cells.has(cell_key) and _guide_kind(cell_key) == "exclude":
+		_draw_blocked(rect.grow(-cell_size * 0.08), cell_size)
+
+
+func _guide_kind(cell_key: Vector2i) -> String:
+	var value = guide_cells.get(cell_key, "place")
+	return str(value)
 
 
 func _draw_piece(rect: Rect2, cell_size: float, is_hint: bool) -> void:
@@ -165,7 +185,8 @@ func _draw_blocked(rect: Rect2, cell_size: float) -> void:
 
 
 func _board_geometry() -> Dictionary:
-	var board_size := minf(size.x, size.y)
+	var usable_size := Vector2(maxf(1.0, size.x - 18.0), maxf(1.0, size.y - 18.0))
+	var board_size := minf(usable_size.x, usable_size.y)
 	var cell_size := board_size / float(maxi(rows, cols))
 	var actual_size := Vector2(cols * cell_size, rows * cell_size)
 	var board_position := (size - actual_size) * 0.5
