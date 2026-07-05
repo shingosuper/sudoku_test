@@ -155,6 +155,8 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 		var guide_kind := _guide_kind(cell_key)
 		if guide_kind == "unit":
 			color = color.lerp(Color("#CDE8FF"), 0.42)
+		elif guide_kind == "line":
+			color = color.lerp(Color("#E0F0FF"), 0.34)
 		elif guide_kind == "candidate":
 			color = color.lerp(Color("#D9F8DF"), 0.44)
 		else:
@@ -175,10 +177,12 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 		var guide_kind := _guide_kind(cell_key)
 		if guide_kind == "place":
 			box.border_color = Color("#23845C")
-		elif guide_kind == "exclude":
+		elif guide_kind == "exclude" or guide_kind == "exclude_empty":
 			box.border_color = Color("#D98A24")
 		elif guide_kind == "candidate":
 			box.border_color = Color("#48B985")
+		elif guide_kind == "line":
+			box.border_color = Color("#86BDEB")
 		else:
 			box.border_color = Color("#3C8DDE")
 		box.set_border_width_all(maxi(3, int(cell_size * (0.055 + guide_pulse_strength * 0.035))))
