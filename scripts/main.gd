@@ -3,7 +3,7 @@ extends Control
 const LevelStoreScript = preload("res://scripts/level_store.gd")
 const GameBoardScript = preload("res://scripts/game_board.gd")
 const SAVE_PATH := "user://color_queens_save.json"
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
 const HINT_COST := 5
 const INITIAL_HINT_COUNT := 3
 const WIN_REWARD := 10
@@ -25,6 +25,74 @@ const REGION_COLORS = [
 	Color("#FFB56B")
 ]
 
+const TUTORIAL_LEVELS = [
+	{
+		"levelId": -101,
+		"title": "新手教程 1/4",
+		"name": "",
+		"rows": 4,
+		"cols": 4,
+		"targetCount": 3,
+		"tutorial": "按提示点同一个格子：先标记 X，再放皇冠，最后取消。",
+		"regions": [
+			[1, 1, 2, 2],
+			[1, 1, 2, 2],
+			[3, 3, 4, 4],
+			[3, 3, 4, 4]
+		],
+		"target": [1, 1]
+	},
+	{
+		"levelId": -102,
+		"title": "新手教程 2/4",
+		"name": "",
+		"rows": 4,
+		"cols": 4,
+		"targetCount": 1,
+		"tutorial": "每行、每列、每个颜色区域都只能有一个皇冠。",
+		"regions": [
+			[1, 1, 2, 2],
+			[1, 1, 2, 2],
+			[3, 3, 4, 4],
+			[3, 3, 4, 4]
+		],
+		"target": [0, 0]
+	},
+	{
+		"levelId": -103,
+		"title": "新手教程 3/4",
+		"name": "",
+		"rows": 4,
+		"cols": 4,
+		"targetCount": 1,
+		"tutorial": "皇冠周围 8 个相邻格都不能再放皇冠。",
+		"regions": [
+			[1, 1, 2, 2],
+			[1, 1, 2, 2],
+			[3, 3, 4, 4],
+			[3, 3, 4, 4]
+		],
+		"prefill": [[1, 1]],
+		"target": [0, 0]
+	},
+	{
+		"levelId": -104,
+		"title": "新手教程 4/4",
+		"name": "",
+		"rows": 4,
+		"cols": 4,
+		"targetCount": 1,
+		"tutorial": "遇到卡点时使用提示。提示会解释观察范围，不会替你落子。",
+		"regions": [
+			[1, 1, 2, 2],
+			[1, 1, 2, 2],
+			[3, 3, 4, 4],
+			[3, 3, 4, 4]
+		],
+		"target": [2, 0]
+	}
+]
+
 var levels: Array = []
 var current_level_index := 0
 var current_level: Dictionary = {}
@@ -40,6 +108,12 @@ var active_hint_stage := 0
 var resume_level_id := -1
 var resume_states: Array = []
 var resume_completed := false
+var tutorial_completed := false
+var tutorial_started := false
+var tutorial_step_index := 0
+var tutorial_interaction_stage := 0
+var tutorial_button_stage := 0
+var in_tutorial := false
 
 var home_screen: Control
 var game_screen: Control
@@ -55,6 +129,7 @@ var home_chest_label: Label
 var board
 var level_picker: OptionButton
 var level_label: Label
+var help_button: Button
 var coin_label: Label
 var progress_bar: ProgressBar
 var progress_label: Label
@@ -62,11 +137,16 @@ var coach_label: Label
 var undo_button: Button
 var clear_button: Button
 var hint_button: Button
+var tutorial_skip_button: Button
 var completion_overlay: ColorRect
 var completion_title: Label
 var reward_label: Label
+var completion_next_button: Button
+var completion_replay_button: Button
 var toast_label: Label
 var help_dialog: AcceptDialog
+var tutorial_skip_dialog: ConfirmationDialog
+var tutorial_resume_dialog: ConfirmationDialog
 var toast_tween: Tween
 
 
@@ -79,7 +159,13 @@ func _ready() -> void:
 	_build_ui()
 	current_level_index = clampi(current_level_index, 0, levels.size() - 1)
 	_load_level(current_level_index, true)
-	_show_home()
+	if tutorial_completed:
+		_show_home()
+	elif tutorial_started:
+		_show_home()
+		tutorial_resume_dialog.popup_centered(Vector2i(420, 220))
+	else:
+		_start_tutorial_step(0)
 
 
 func _build_ui() -> void:
@@ -97,7 +183,7 @@ func _build_ui() -> void:
 
 	_build_completion_overlay()
 	_build_toast()
-	_build_help_dialog()
+	_build_tutorial_dialogs()
 
 
 func _build_home_screen() -> Control:
@@ -133,11 +219,8 @@ func _build_home_screen() -> Control:
 	path.set_anchor(SIDE_BOTTOM, 0.77)
 	root.add_child(path)
 
-	root.add_child(_build_home_top_resources())
 	root.add_child(_build_home_castle())
-	root.add_child(_build_home_side_buttons())
 	root.add_child(_build_home_primary_buttons())
-	root.add_child(_build_home_bottom_nav())
 	return root
 
 
@@ -262,23 +345,25 @@ func _build_home_side_buttons() -> Control:
 
 
 func _build_home_primary_buttons() -> Control:
-	var row := HBoxContainer.new()
-	row.set_anchor(SIDE_LEFT, 0.0)
-	row.set_anchor(SIDE_TOP, 0.70)
-	row.set_anchor(SIDE_RIGHT, 1.0)
-	row.set_anchor(SIDE_BOTTOM, 0.80)
-	row.offset_left = 18
-	row.offset_right = -18
-	row.add_theme_constant_override("separation", 12)
+	var column := VBoxContainer.new()
+	column.set_anchor(SIDE_LEFT, 0.0)
+	column.set_anchor(SIDE_TOP, 0.68)
+	column.set_anchor(SIDE_RIGHT, 1.0)
+	column.set_anchor(SIDE_BOTTOM, 0.84)
+	column.offset_left = 36
+	column.offset_right = -36
+	column.add_theme_constant_override("separation", 12)
 
 	home_start_button = _royal_home_button("开始关卡", Color("#28A83C"))
-	home_start_button.pressed.connect(_show_game)
-	row.add_child(home_start_button)
+	home_start_button.custom_minimum_size.y = 64
+	home_start_button.pressed.connect(_start_current_flow)
+	column.add_child(home_start_button)
 
-	var tasks := _royal_home_button("任务", Color("#F2A51E"))
-	tasks.pressed.connect(func() -> void: _show_toast("完成关卡，修复皇冠花园"))
-	row.add_child(tasks)
-	return row
+	var newbie := _royal_home_button("新人流程", Color("#F2A51E"))
+	newbie.custom_minimum_size.y = 56
+	newbie.pressed.connect(_simulate_new_user_flow)
+	column.add_child(newbie)
+	return column
 
 
 func _build_home_bottom_nav() -> Control:
@@ -415,7 +500,7 @@ func _build_home_actions() -> Control:
 	home_start_button = _action_button("开始关卡", Color("#FFB84E"))
 	home_start_button.custom_minimum_size.y = 66
 	home_start_button.add_theme_font_size_override("font_size", 23)
-	home_start_button.pressed.connect(_show_game)
+	home_start_button.pressed.connect(_start_current_flow)
 	column.add_child(home_start_button)
 
 	var row := HBoxContainer.new()
@@ -472,7 +557,6 @@ func _build_game_screen() -> Control:
 
 	content.add_child(_build_top_bar())
 	content.add_child(_build_level_header())
-	content.add_child(_build_progress_row())
 	content.add_child(_build_coach())
 
 	board = GameBoardScript.new()
@@ -482,7 +566,6 @@ func _build_game_screen() -> Control:
 	content.add_child(board)
 
 	content.add_child(_build_action_bar())
-	content.add_child(_build_ad_placeholder())
 	return safe_margin
 
 
@@ -507,39 +590,15 @@ func _build_top_bar() -> Control:
 	home_button.pressed.connect(_show_home)
 	row.add_child(home_button)
 
-	var heart := Label.new()
-	heart.text = "♥  3"
-	heart.add_theme_color_override("font_color", Color("#F06B78"))
-	heart.add_theme_font_size_override("font_size", 17)
-	heart.custom_minimum_size.x = 42
-	heart.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(heart)
+	tutorial_skip_button = _small_button("跳")
+	tutorial_skip_button.tooltip_text = "跳过新手教程"
+	tutorial_skip_button.pressed.connect(_on_tutorial_button_pressed)
+	tutorial_skip_button.hide()
+	row.add_child(tutorial_skip_button)
 
-	level_picker = OptionButton.new()
-	level_picker.custom_minimum_size = Vector2(92, 38)
-	level_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	level_picker.focus_mode = Control.FOCUS_NONE
-	level_picker.tooltip_text = "切换调试关卡"
-	level_picker.add_theme_font_size_override("font_size", 13)
-	level_picker.add_theme_color_override("font_color", INK)
-	level_picker.add_theme_stylebox_override("normal", _button_style(Color("#F1F4F7"), 13))
-	level_picker.add_theme_stylebox_override("hover", _button_style(Color("#E7EDF2"), 13))
-	level_picker.add_theme_stylebox_override("pressed", _button_style(Color("#DDE5EC"), 13))
-	for index in range(levels.size()):
-		var level: Dictionary = levels[index]
-		level_picker.add_item("关卡 %d" % int(level["levelId"]), index)
-	level_picker.item_selected.connect(_on_level_selected)
-	row.add_child(level_picker)
-
-	var editor := _small_button("编")
-	editor.tooltip_text = "关卡编辑器"
-	editor.pressed.connect(_open_level_editor)
-	row.add_child(editor)
-
-	var settings := _small_button("⚙")
-	settings.tooltip_text = "切换即时纠错"
-	settings.pressed.connect(_on_settings)
-	row.add_child(settings)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
 	return panel
 
 
@@ -553,14 +612,6 @@ func _build_level_header() -> Control:
 	level_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(level_label)
 
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(spacer)
-
-	var help := _small_button("?")
-	help.tooltip_text = "玩法说明"
-	help.pressed.connect(_on_help)
-	row.add_child(help)
 	return row
 
 
@@ -686,21 +737,21 @@ func _build_completion_overlay() -> void:
 	reward_label.add_theme_font_size_override("font_size", 19)
 	column.add_child(reward_label)
 
-	var next_button := _action_button("下一关  →", Color("#FFB84E"))
-	next_button.custom_minimum_size.y = 58
-	next_button.add_theme_color_override("font_color", INK)
-	next_button.add_theme_font_size_override("font_size", 22)
-	next_button.pressed.connect(_next_level)
-	column.add_child(next_button)
+	completion_next_button = _action_button("下一关  →", Color("#FFB84E"))
+	completion_next_button.custom_minimum_size.y = 58
+	completion_next_button.add_theme_color_override("font_color", INK)
+	completion_next_button.add_theme_font_size_override("font_size", 22)
+	completion_next_button.pressed.connect(_next_level)
+	column.add_child(completion_next_button)
 
-	var replay_button := Button.new()
-	replay_button.text = "重玩本关"
-	replay_button.flat = true
-	replay_button.custom_minimum_size.y = 52
-	replay_button.add_theme_color_override("font_color", MUTED)
-	replay_button.add_theme_font_size_override("font_size", 19)
-	replay_button.pressed.connect(_replay_level)
-	column.add_child(replay_button)
+	completion_replay_button = Button.new()
+	completion_replay_button.text = "重玩本关"
+	completion_replay_button.flat = true
+	completion_replay_button.custom_minimum_size.y = 52
+	completion_replay_button.add_theme_color_override("font_color", MUTED)
+	completion_replay_button.add_theme_font_size_override("font_size", 19)
+	completion_replay_button.pressed.connect(_replay_level)
+	column.add_child(completion_replay_button)
 
 
 func _build_toast() -> void:
@@ -728,7 +779,31 @@ func _build_help_dialog() -> void:
 	add_child(help_dialog)
 
 
+func _build_tutorial_dialogs() -> void:
+	tutorial_skip_dialog = ConfirmationDialog.new()
+	tutorial_skip_dialog.title = "跳过新手教程？"
+	tutorial_skip_dialog.dialog_text = "跳过后会直接进入第 1 关，并记为已完成新手教程。"
+	tutorial_skip_dialog.ok_button_text = "确认跳过"
+	tutorial_skip_dialog.cancel_button_text = "继续教程"
+	tutorial_skip_dialog.confirmed.connect(func() -> void: _finish_tutorial(true))
+	add_child(tutorial_skip_dialog)
+
+	tutorial_resume_dialog = ConfirmationDialog.new()
+	tutorial_resume_dialog.title = "继续新手教程？"
+	tutorial_resume_dialog.dialog_text = "检测到你还没有完成新手教程。"
+	tutorial_resume_dialog.ok_button_text = "继续教程"
+	tutorial_resume_dialog.cancel_button_text = "重新开始"
+	tutorial_resume_dialog.confirmed.connect(func() -> void: _start_tutorial_step(tutorial_step_index))
+	tutorial_resume_dialog.canceled.connect(func() -> void: _start_tutorial_step(0))
+	add_child(tutorial_resume_dialog)
+
+
 func _load_level(index: int, allow_resume: bool = false) -> void:
+	in_tutorial = false
+	if tutorial_skip_button:
+		tutorial_skip_button.hide()
+	if level_picker:
+		level_picker.disabled = false
 	current_level_index = index
 	current_level = levels[index]
 	is_completed = false
@@ -746,10 +821,23 @@ func _load_level(index: int, allow_resume: bool = false) -> void:
 		cell_states = _blank_states(rows, cols)
 
 	level_label.text = "关卡 %d" % int(current_level["levelId"])
+	if help_button:
+		help_button.show()
+	if completion_next_button:
+		completion_next_button.text = "下一关  →"
+	if completion_replay_button:
+		completion_replay_button.text = "重玩本关"
+	if undo_button:
+		undo_button.show()
+	if clear_button:
+		clear_button.show()
+	if hint_button:
+		hint_button.show()
 	_update_level_picker()
 	coach_label.text = str(current_level.get("tutorial", "放置全部皇冠，满足四条规则。"))
 	coach_label.add_theme_color_override("font_color", Color("#72552B"))
-	progress_bar.max_value = int(current_level["targetCount"])
+	if progress_bar:
+		progress_bar.max_value = int(current_level["targetCount"])
 	board.set_level(current_level, cell_states, REGION_COLORS)
 	_validate_and_update(false)
 	_update_home()
@@ -760,6 +848,9 @@ func _load_level(index: int, allow_resume: bool = false) -> void:
 
 
 func _on_cell_pressed(row: int, col: int) -> void:
+	if in_tutorial:
+		_on_tutorial_cell_pressed(row, col)
+		return
 	if is_completed:
 		return
 	active_hint_step.clear()
@@ -783,6 +874,9 @@ func _on_cell_pressed(row: int, col: int) -> void:
 
 
 func _undo() -> void:
+	if in_tutorial:
+		_use_tutorial_undo()
+		return
 	if move_history.is_empty() or is_completed:
 		return
 	cell_states = move_history.pop_back()
@@ -792,6 +886,9 @@ func _undo() -> void:
 
 
 func _clear_board() -> void:
+	if in_tutorial:
+		_use_tutorial_clear()
+		return
 	if is_completed or _piece_positions().is_empty() and not _has_blocked_cells():
 		return
 	_push_history()
@@ -806,6 +903,9 @@ func _clear_board() -> void:
 
 
 func _use_hint() -> void:
+	if in_tutorial:
+		_use_tutorial_hint()
+		return
 	if is_completed:
 		return
 
@@ -840,8 +940,10 @@ func _validate_and_update(allow_completion: bool) -> void:
 	var conflicts := _find_conflicts(pieces)
 	board.set_errors(conflicts if immediate_errors else {})
 
-	progress_bar.value = pieces.size()
-	progress_label.text = "%d / %d" % [pieces.size(), int(current_level["targetCount"])]
+	if progress_bar:
+		progress_bar.value = pieces.size()
+	if progress_label:
+		progress_label.text = "%d / %d" % [pieces.size(), int(current_level["targetCount"])]
 	undo_button.disabled = move_history.is_empty()
 	clear_button.disabled = pieces.is_empty() and not _has_blocked_cells()
 
@@ -1786,6 +1888,268 @@ func _has_blocked_cells() -> bool:
 	return false
 
 
+
+func _start_tutorial_step(index: int) -> void:
+	in_tutorial = true
+	tutorial_started = true
+	tutorial_step_index = clampi(index, 0, TUTORIAL_LEVELS.size() - 1)
+	tutorial_interaction_stage = 0
+	tutorial_button_stage = 0
+	current_level = TUTORIAL_LEVELS[tutorial_step_index]
+	is_completed = false
+	active_hint_step.clear()
+	active_hint_stage = 0
+	move_history.clear()
+	completion_overlay.hide()
+	cell_states = _blank_states(int(current_level["rows"]), int(current_level["cols"]))
+	for coordinate in current_level.get("prefill", []):
+		cell_states[int(coordinate[0])][int(coordinate[1])] = "piece"
+	level_label.text = str(current_level.get("name", ""))
+	coach_label.text = str(current_level["tutorial"])
+	coach_label.add_theme_color_override("font_color", Color("#72552B"))
+	if progress_bar:
+		progress_bar.max_value = int(current_level["targetCount"])
+		progress_bar.value = 0
+	if progress_label:
+		progress_label.text = "%d / %d" % [0, int(current_level["targetCount"])]
+	if level_picker:
+		level_picker.disabled = true
+	if tutorial_skip_button:
+		_update_tutorial_button()
+	if completion_next_button:
+		completion_next_button.text = "下一步  →" if tutorial_step_index < TUTORIAL_LEVELS.size() - 1 else "进入第 1 关  →"
+	if completion_replay_button:
+		completion_replay_button.text = "重来本步"
+	board.set_level(current_level, cell_states, REGION_COLORS)
+	_set_tutorial_guides()
+	_update_tutorial_action_bar()
+	_show_game()
+	_update_hint_button()
+	_update_home()
+	_save_game()
+
+
+func _set_tutorial_guides() -> void:
+	var guides := {}
+	var target := _tutorial_target()
+	match tutorial_step_index:
+		0:
+			guides[target] = "place"
+		1:
+			for cell in _row_cells(target.y):
+				guides[cell] = "unit"
+			for cell in _col_cells(target.x):
+				guides[cell] = "unit"
+			for cell in _region_cells(int(current_level["regions"][target.y][target.x])):
+				guides[cell] = "unit"
+			guides[target] = "place"
+		2:
+			for row in range(int(current_level["rows"])):
+				for col in range(int(current_level["cols"])):
+					if absi(col - 1) <= 1 and absi(row - 1) <= 1 and not (col == 1 and row == 1):
+						guides[Vector2i(col, row)] = "exclude"
+			guides[target] = "exclude"
+		3:
+			guides[target] = "candidate"
+	board.set_guides(guides)
+
+
+func _update_tutorial_action_bar() -> void:
+	if not undo_button or not clear_button or not hint_button:
+		return
+	var show_actions := in_tutorial and tutorial_step_index == 3
+	undo_button.visible = show_actions
+	clear_button.visible = show_actions
+	hint_button.visible = show_actions
+	if not show_actions:
+		return
+	undo_button.disabled = tutorial_button_stage != 0
+	clear_button.disabled = tutorial_button_stage != 1
+	hint_button.disabled = tutorial_button_stage != 2
+	if tutorial_button_stage == 0:
+		coach_label.text = "先点底部的撤销按钮。它可以撤回上一步操作。"
+	elif tutorial_button_stage == 1:
+		coach_label.text = "现在点清除按钮。它会帮你重新整理当前棋盘。"
+	else:
+		coach_label.text = "最后点提示按钮。它会解释下一步该观察哪里。"
+
+
+func _tutorial_target() -> Vector2i:
+	var target: Array = current_level.get("target", [0, 0])
+	return Vector2i(int(target[1]), int(target[0]))
+
+
+func _on_tutorial_cell_pressed(row: int, col: int) -> void:
+	if is_completed:
+		return
+	var target := _tutorial_target()
+	if Vector2i(col, row) != target:
+		_show_toast("先点高亮的教程格子")
+		board.play_guide_feedback(target.y, target.x)
+		return
+	var state: String = cell_states[row][col]
+	match state:
+		"empty":
+			cell_states[row][col] = "blocked"
+		"blocked":
+			cell_states[row][col] = "piece"
+		_:
+			cell_states[row][col] = "empty"
+	board.set_states(cell_states)
+	board.play_cell_feedback(row, col)
+	_validate_tutorial_step(row, col)
+	_save_game()
+
+
+func _validate_tutorial_step(row: int, col: int) -> void:
+	match tutorial_step_index:
+		0:
+			var expected := ["blocked", "piece", "empty"]
+			if cell_states[row][col] == expected[tutorial_interaction_stage]:
+				tutorial_interaction_stage += 1
+				if progress_bar:
+					progress_bar.value = tutorial_interaction_stage
+				if progress_label:
+					progress_label.text = "%d / 3" % tutorial_interaction_stage
+				if tutorial_interaction_stage == 1:
+					coach_label.text = "很好，X 表示这里先排除。再点一次，把它变成皇冠。"
+				elif tutorial_interaction_stage == 2:
+					coach_label.text = "这就是皇冠。再点一次，可以取消这个格子的状态。"
+				elif tutorial_interaction_stage >= 3:
+					_complete_tutorial_step("你学会了点击、放皇冠和取消。")
+		1:
+			if cell_states[row][col] == "piece":
+				if progress_bar:
+					progress_bar.value = 1
+				if progress_label:
+					progress_label.text = "1 / 1"
+				board.set_guides(_tutorial_unique_guides(Vector2i(col, row)))
+				_complete_tutorial_step("记住：同一行、同一列、同一颜色区域都只能有一个皇冠。")
+			else:
+				coach_label.text = "这一关需要把高亮格点成皇冠。"
+		2:
+			if cell_states[row][col] == "blocked":
+				if progress_bar:
+					progress_bar.value = 1
+				if progress_label:
+					progress_label.text = "1 / 1"
+				_complete_tutorial_step("很好，皇冠周围相邻格都要排除。")
+			else:
+				cell_states[row][col] = "empty"
+				board.set_states(cell_states)
+				coach_label.text = "这里和皇冠相邻，不能放皇冠。点成 X 来排除它。"
+				_show_toast("相邻格不能放皇冠")
+		3:
+			_show_toast("这一关按底部按钮顺序学习：撤销、清除、提示")
+
+
+func _tutorial_unique_guides(piece: Vector2i) -> Dictionary:
+	var guides := {}
+	for cell in _row_cells(piece.y):
+		if cell != piece:
+			guides[cell] = "exclude"
+	for cell in _col_cells(piece.x):
+		if cell != piece:
+			guides[cell] = "exclude"
+	for cell in _region_cells(int(current_level["regions"][piece.y][piece.x])):
+		if cell != piece:
+			guides[cell] = "exclude"
+	guides[piece] = "place"
+	return guides
+
+
+func _use_tutorial_undo() -> void:
+	if tutorial_step_index != 3:
+		_show_toast("教程关卡中请按高亮提示操作")
+		return
+	if tutorial_button_stage != 0:
+		_show_toast("先按当前高亮的按钮")
+		return
+	tutorial_button_stage = 1
+	_show_toast("撤销：可以回到上一步。")
+	_update_tutorial_action_bar()
+
+
+func _use_tutorial_clear() -> void:
+	if tutorial_step_index != 3:
+		_start_tutorial_step(tutorial_step_index)
+		_show_toast("已重来本步教程")
+		return
+	if tutorial_button_stage != 1:
+		_show_toast("先按当前高亮的按钮")
+		return
+	tutorial_button_stage = 2
+	_show_toast("清除：可以清空当前尝试，重新开始。")
+	_update_tutorial_action_bar()
+
+
+func _use_tutorial_hint() -> void:
+	if tutorial_step_index != 3:
+		_show_toast("提示会在第 4 个教程关中演示")
+		return
+	if tutorial_button_stage != 2:
+		_show_toast("先学习撤销和清除，再使用提示")
+		return
+	var target := _tutorial_target()
+	board.set_guides({
+		Vector2i(0, 0): "unit",
+		Vector2i(1, 0): "exclude",
+		target: "place",
+		Vector2i(3, 0): "candidate"
+	})
+	board.play_guide_feedback(target.y, target.x)
+	coach_label.text = "提示会标出观察范围和候选格，但不会替你放皇冠。正式关卡中，当每行、每列、每个颜色区域都有一个皇冠，且皇冠互不相邻时就会通关。"
+	coach_label.add_theme_color_override("font_color", Color("#23845C"))
+	tutorial_button_stage = 3
+	_update_tutorial_action_bar()
+	if progress_bar:
+		progress_bar.value = 1
+	if progress_label:
+		progress_label.text = "1 / 1"
+	_complete_tutorial_step("你学会了使用提示，也知道了通关目标。")
+
+
+func _complete_tutorial_step(message: String) -> void:
+	is_completed = true
+	board.play_victory()
+	_save_game()
+	_show_toast("%s 完成：%s" % [str(current_level["title"]), message])
+	await get_tree().create_timer(2.0).timeout
+	if in_tutorial and is_completed:
+		_next_tutorial_step()
+
+
+func _next_tutorial_step() -> void:
+	if tutorial_step_index >= TUTORIAL_LEVELS.size() - 1:
+		_finish_tutorial(false)
+	else:
+		_start_tutorial_step(tutorial_step_index + 1)
+
+
+func _request_skip_tutorial() -> void:
+	if in_tutorial:
+		tutorial_skip_dialog.popup_centered(Vector2i(420, 220))
+
+
+func _on_tutorial_button_pressed() -> void:
+	if in_tutorial:
+		_request_skip_tutorial()
+	else:
+		_start_tutorial_step(0)
+
+
+func _finish_tutorial(skipped: bool) -> void:
+	tutorial_completed = true
+	tutorial_started = false
+	in_tutorial = false
+	tutorial_step_index = 0
+	tutorial_button_stage = 0
+	_load_level(0)
+	_show_game()
+	_save_game()
+	_show_toast("已跳过教程，进入第 1 关" if skipped else "新手教程完成，进入第 1 关")
+
+
 func _complete_level() -> void:
 	if is_completed:
 		return
@@ -1810,6 +2174,9 @@ func _complete_level() -> void:
 
 
 func _next_level() -> void:
+	if in_tutorial:
+		_next_tutorial_step()
+		return
 	var next_index := current_level_index + 1
 	if next_index >= levels.size():
 		next_index = 0
@@ -1819,6 +2186,9 @@ func _next_level() -> void:
 
 
 func _replay_level() -> void:
+	if in_tutorial:
+		_start_tutorial_step(tutorial_step_index)
+		return
 	_load_level(current_level_index)
 
 
@@ -1899,6 +2269,9 @@ func _load_save() -> void:
 	resume_states = data.get("cellStates", [])
 	resume_completed = bool(data.get("isCompleted", false))
 	immediate_errors = bool(data.get("immediateErrors", true))
+	tutorial_completed = bool(data.get("tutorialCompleted", false))
+	tutorial_started = bool(data.get("tutorialStarted", false))
+	tutorial_step_index = clampi(int(data.get("tutorialStepIndex", 0)), 0, TUTORIAL_LEVELS.size() - 1)
 
 
 func _save_game() -> void:
@@ -1914,7 +2287,10 @@ func _save_game() -> void:
 		"hintCount": hint_count,
 		"immediateErrors": immediate_errors,
 		"isCompleted": is_completed,
-		"cellStates": cell_states
+		"cellStates": cell_states,
+		"tutorialCompleted": tutorial_completed,
+		"tutorialStarted": tutorial_started,
+		"tutorialStepIndex": tutorial_step_index
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file:
@@ -1930,6 +2306,9 @@ func _update_coin_label() -> void:
 
 func _update_hint_button() -> void:
 	if not hint_button:
+		return
+	if in_tutorial:
+		hint_button.text = "✦  提示"
 		return
 	if hint_count > 0:
 		hint_button.text = "✦  提示  ×%d" % hint_count
@@ -1952,13 +2331,48 @@ func _show_home() -> void:
 	_update_home()
 
 
+func _start_current_flow() -> void:
+	if tutorial_completed:
+		_show_game()
+	elif tutorial_started:
+		tutorial_resume_dialog.popup_centered(Vector2i(420, 220))
+	else:
+		_start_tutorial_step(0)
+
+
+func _simulate_new_user_flow() -> void:
+	tutorial_completed = false
+	tutorial_started = false
+	tutorial_step_index = 0
+	tutorial_interaction_stage = 0
+	current_level_index = 0
+	resume_level_id = -1
+	resume_states = []
+	resume_completed = false
+	completion_overlay.hide()
+	_start_tutorial_step(0)
+	_show_toast("已进入新人流程")
+
+
 func _show_game() -> void:
 	if home_screen:
 		home_screen.hide()
 	if game_screen:
 		game_screen.show()
+	_update_tutorial_button()
 	if board:
 		board.queue_redraw()
+
+
+func _update_tutorial_button() -> void:
+	if not tutorial_skip_button:
+		return
+	if in_tutorial:
+		tutorial_skip_button.text = "跳"
+		tutorial_skip_button.tooltip_text = "跳过新手教程"
+		tutorial_skip_button.show()
+	else:
+		tutorial_skip_button.hide()
 
 
 func _update_home() -> void:
@@ -1989,7 +2403,12 @@ func _update_home() -> void:
 	if home_progress_label:
 		home_progress_label.text = "%d / %d" % [area_completed, area_end - area_start]
 	if home_start_button:
-		home_start_button.text = "开始第 %d 关" % level_id
+		if tutorial_completed:
+			home_start_button.text = "开始第 %d 关" % level_id
+		elif tutorial_started:
+			home_start_button.text = "继续新手教程"
+		else:
+			home_start_button.text = "开始新手教程"
 
 
 func _show_toast(message: String) -> void:

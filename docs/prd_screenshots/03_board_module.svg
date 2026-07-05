@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="1280" viewBox="0 0 960 1280">
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#E23B4A"/></marker>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#1d2b45" flood-opacity="0.18"/></filter>
+</defs>
+<rect width="960" height="1280" fill="#F5F7FB"/>
+<text x="72" y="48" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#26334A">6.3 棋盘交互模块：点击状态与反馈</text>
+<rect x="72" y="84" width="420" height="1040" rx="34" fill="#FFFFFF" stroke="#26334A" stroke-width="4" filter="url(#shadow)"/>
+<rect x="92" y="108" width="380" height="992" rx="22" fill="#DFF4FF" stroke="#D8DEE9" stroke-width="1" />
+<text x="282.0" y="154" font-family="Arial, PingFang SC, sans-serif" font-size="24" font-weight="700" fill="#26334A" text-anchor="middle">棋盘交互</text>
+<rect x="112" y="220" width="320" height="92" rx="16" fill="#FFFFFF" stroke="#D8DEE9" stroke-width="2" />
+<text x="132" y="258" font-family="Arial, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#26334A" text-anchor="start">点击格子后状态循环</text>
+<text x="132" y="288" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="400" fill="#536278" text-anchor="start">空白 -&gt; X -&gt; 皇冠 -&gt; 空白</text>
+<rect x="101" y="374" width="342" height="342" rx="12" fill="#26334A" stroke="#26334A" stroke-width="0" />
+<rect x="107.0" y="380.0" width="55.0" height="55.0" rx="4" fill="#B8E6B1" stroke="#FFFFFF" stroke-width="2" />
+<line x1="122.0" y1="395.0" x2="147.0" y2="420.0" stroke="#26334A" stroke-width="5" stroke-linecap="round"/>
+<line x1="147.0" y1="395.0" x2="122.0" y2="420.0" stroke="#26334A" stroke-width="5" stroke-linecap="round"/>
+<rect x="162.0" y="380.0" width="55.0" height="55.0" rx="4" fill="#B8E6B1" stroke="#FFFFFF" stroke-width="2" />
+<rect x="167.0" y="385.0" width="45.0" height="45.0" rx="8" fill="none" stroke="#E23B4A" stroke-width="5" />
+<text x="189.5" y="418.5" font-family="Arial, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#26334A" text-anchor="middle">皇冠</text>
+<rect x="217.0" y="380.0" width="55.0" height="55.0" rx="4" fill="#FFE6A7" stroke="#FFFFFF" stroke-width="2" />
+<rect x="272.0" y="380.0" width="55.0" height="55.0" rx="4" fill="#FFE6A7" stroke="#FFFFFF" stroke-width="2" />
+<rect x="327.0" y="380.0" width="55.0" height="55.0" rx="4" fill="#A8D8FF" stroke="#FFFFFF" stroke-width="2" />
+<rect x="382.0" y="380.0" width="55.0" height="55.0" rx="4" fill="#A8D8FF" stroke="#FFFFFF" stroke-width="2" />
+<rect x="107.0" y="435.0" width="55.0" height="55.0" rx="4" fill="#B8E6B1" stroke="#FFFFFF" stroke-width="2" />
+<rect x="162.0" y="435.0" width="55.0" height="55.0" rx="4" fill="#B8E6B1" stroke="#FFFFFF" stroke-width="2" />
+<rect x="217.0" y="435.0" width="55.0" height="55.0" rx="4" fill="#B8E6B1" stroke="#FFFFFF" stroke-width="2" />
+<rect x="272.0" y="435.0" width="55.0" height="55.0" rx="4" fill="#FFE6A7" stroke="#FFFFFF" stroke-width="2" />
+<rect x="327.0" y="435.0" width="55.0" height="55.0" rx="4" fill="#FFE6A7" stroke="#FFFFFF" stroke-width="2" />
+<rect x="382.0" y="435.0" width="55.0" height="55.0" rx="4" fill="#A8D8FF" stroke="#FFFFFF" stroke-width="2" />
+<rect x="107.0" y="490.0" width="55.0" height="55.0" rx="4" fill="#FFC6C6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="162.0" y="490.0" width="55.0" height="55.0" rx="4" fill="#B8E6B1" stroke="#FFFFFF" stroke-width="2" />
+<rect x="217.0" y="490.0" width="55.0" height="55.0" rx="4" fill="#B8E6B1" stroke="#FFFFFF" stroke-width="2" />
+<rect x="222.0" y="495.0" width="45.0" height="45.0" rx="8" fill="none" stroke="#F9B84A" stroke-width="5" />
+<line x1="232.0" y1="505.0" x2="257.0" y2="530.0" stroke="#26334A" stroke-width="5" stroke-linecap="round"/>
+<line x1="257.0" y1="505.0" x2="232.0" y2="530.0" stroke="#26334A" stroke-width="5" stroke-linecap="round"/>
+<rect x="272.0" y="490.0" width="55.0" height="55.0" rx="4" fill="#FFE6A7" stroke="#FFFFFF" stroke-width="2" />
+<rect x="327.0" y="490.0" width="55.0" height="55.0" rx="4" fill="#FFE6A7" stroke="#FFFFFF" stroke-width="2" />
+<rect x="382.0" y="490.0" width="55.0" height="55.0" rx="4" fill="#A8D8FF" stroke="#FFFFFF" stroke-width="2" />
+<rect x="107.0" y="545.0" width="55.0" height="55.0" rx="4" fill="#FFC6C6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="162.0" y="545.0" width="55.0" height="55.0" rx="4" fill="#B8E6B1" stroke="#FFFFFF" stroke-width="2" />
+<rect x="217.0" y="545.0" width="55.0" height="55.0" rx="4" fill="#FFE6A7" stroke="#FFFFFF" stroke-width="2" />
+<rect x="272.0" y="545.0" width="55.0" height="55.0" rx="4" fill="#FFE6A7" stroke="#FFFFFF" stroke-width="2" />
+<rect x="327.0" y="545.0" width="55.0" height="55.0" rx="4" fill="#E7C6FF" stroke="#FFFFFF" stroke-width="2" />
+<rect x="332.0" y="550.0" width="45.0" height="45.0" rx="8" fill="none" stroke="#48B985" stroke-width="5" />
+<text x="354.5" y="583.5" font-family="Arial, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#26334A" text-anchor="middle">皇冠</text>
+<rect x="382.0" y="545.0" width="55.0" height="55.0" rx="4" fill="#E7C6FF" stroke="#FFFFFF" stroke-width="2" />
+<rect x="107.0" y="600.0" width="55.0" height="55.0" rx="4" fill="#FFC6C6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="162.0" y="600.0" width="55.0" height="55.0" rx="4" fill="#FFC6C6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="217.0" y="600.0" width="55.0" height="55.0" rx="4" fill="#FFC6C6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="272.0" y="600.0" width="55.0" height="55.0" rx="4" fill="#B9F2E6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="327.0" y="600.0" width="55.0" height="55.0" rx="4" fill="#E7C6FF" stroke="#FFFFFF" stroke-width="2" />
+<rect x="382.0" y="600.0" width="55.0" height="55.0" rx="4" fill="#E7C6FF" stroke="#FFFFFF" stroke-width="2" />
+<rect x="107.0" y="655.0" width="55.0" height="55.0" rx="4" fill="#FFC6C6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="162.0" y="655.0" width="55.0" height="55.0" rx="4" fill="#FFC6C6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="217.0" y="655.0" width="55.0" height="55.0" rx="4" fill="#FFC6C6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="272.0" y="655.0" width="55.0" height="55.0" rx="4" fill="#B9F2E6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="327.0" y="655.0" width="55.0" height="55.0" rx="4" fill="#B9F2E6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="382.0" y="655.0" width="55.0" height="55.0" rx="4" fill="#B9F2E6" stroke="#FFFFFF" stroke-width="2" />
+<rect x="142" y="770" width="260" height="60" rx="16" fill="#48B985" stroke="#2A9C6F" stroke-width="2" />
+<text x="272.0" y="808.0" font-family="Arial, PingFang SC, sans-serif" font-size="22" font-weight="700" fill="#fff" text-anchor="middle">点击同一格继续切换</text>
+<circle cx="548" cy="225" r="20" fill="#E23B4A"/>
+<text x="548" y="232" font-family="Arial, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+<text x="580" y="222" font-family="Arial, PingFang SC, sans-serif" font-size="22" font-weight="700" fill="#26334A" text-anchor="start">状态循环</text>
+<text x="580" y="252" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="400" fill="#536278" text-anchor="start">第一次点击标记排除 X，第二次放皇冠，第三次清空。</text>
+<line x1="296" y1="286" x2="532" y2="225" stroke="#E23B4A" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+<circle cx="548" cy="430" r="20" fill="#E23B4A"/>
+<text x="548" y="437" font-family="Arial, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+<text x="580" y="427" font-family="Arial, PingFang SC, sans-serif" font-size="22" font-weight="700" fill="#26334A" text-anchor="start">触控命中</text>
+<text x="580" y="457" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="400" fill="#536278" text-anchor="start">鼠标或触屏坐标会换算为棋盘行列，再交给主逻辑。</text>
+<line x1="405" y1="520" x2="532" y2="430" stroke="#E23B4A" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+<circle cx="548" cy="650" r="20" fill="#E23B4A"/>
+<text x="548" y="657" font-family="Arial, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+<text x="580" y="647" font-family="Arial, PingFang SC, sans-serif" font-size="22" font-weight="700" fill="#26334A" text-anchor="start">视觉反馈</text>
+<text x="580" y="677" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="400" fill="#536278" text-anchor="start">冲突、提示候选、建议格使用不同描边和脉冲动画。</text>
+<line x1="390" y1="604" x2="532" y2="650" stroke="#E23B4A" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+</svg>

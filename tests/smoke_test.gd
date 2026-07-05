@@ -21,7 +21,8 @@ func _run() -> void:
 	await process_frame
 
 	assert(game.levels.size() >= 50, "MVP should include 50 default levels")
-	assert(game.home_screen != null and game.home_screen.visible, "Game should open on the home screen")
+	assert(game.home_screen != null, "Home screen should exist")
+	assert(game.game_screen != null, "Game screen should exist")
 	game._show_game()
 	await process_frame
 	assert(game.board != null and game.board.size.x >= 400.0, "Board must render at a mobile-friendly size")
