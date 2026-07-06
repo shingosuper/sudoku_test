@@ -59,7 +59,9 @@ macOS 也可以直接执行：
 ## 代码结构
 
 ```text
+AGENTS.md                  项目协作、文档和测试规则
 data/levels.json           关卡配置
+docs/PRODUCT_REQUIREMENTS.md 产品需求文档与回归测试清单
 scenes/main.tscn           主场景
 scenes/level_editor.tscn   关卡编辑器场景
 scripts/main.gd            UI、游戏状态、规则、存档与通关流程
