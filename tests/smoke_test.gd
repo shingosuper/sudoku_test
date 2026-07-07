@@ -20,7 +20,11 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 
-	assert(game.levels.size() >= 5, "MVP should include multiple levels")
+	assert(game.levels.size() >= 50, "MVP should include 50 default levels")
+	assert(game.home_screen != null, "Home screen should exist")
+	assert(game.game_screen != null, "Game screen should exist")
+	game._show_game()
+	await process_frame
 	assert(game.board != null and game.board.size.x >= 400.0, "Board must render at a mobile-friendly size")
 
 	for level in game.levels:
@@ -45,7 +49,9 @@ func _run() -> void:
 	var coins_before: int = game.coin_count
 	var hints_before: int = game.hint_count
 	game._use_hint()
-	assert(game._piece_positions().size() == 1, "Hint must place a correct piece")
+	assert(game._piece_positions().is_empty(), "Hint should teach without placing a piece")
+	assert(game.board.guide_cells.size() >= 1, "Hint must highlight the best next reasoning step")
+	assert(str(game.coach_label.text).length() >= 20, "Hint must explain why this step is useful now")
 	assert(game.hint_count == hints_before - 1, "Hint must consume one available use")
 	assert(game.coin_count == coins_before, "Free hint uses must not charge coins")
 
@@ -64,6 +70,15 @@ func _run() -> void:
 
 
 func _validate_solution(level: Dictionary) -> void:
+	var rows := int(level["rows"])
+	var cols := int(level["cols"])
+	assert(rows == cols, "Migrated levels should be square")
+	assert(rows >= 5 and rows <= 9, "Migrated levels should support 5x5 through 9x9 boards")
+	assert(level["regions"].size() == rows, "Region row count must match level")
+	for region_row in level["regions"]:
+		assert(region_row.size() == cols, "Region column count must match level")
+	assert(int(level["targetCount"]) == rows, "Queens-style levels should place one piece per row")
+
 	var seen_rows := {}
 	var seen_cols := {}
 	var seen_regions := {}
@@ -84,11 +99,56 @@ func _validate_solution(level: Dictionary) -> void:
 			var a := positions[i]
 			var b := positions[j]
 			assert(not (absi(a.x - b.x) <= 1 and absi(a.y - b.y) <= 1), "Solution pieces cannot be adjacent")
+	assert(str(level.get("difficulty", "")) != "", "Each default level should have a difficulty label")
+
+
+func _count_solutions(level: Dictionary, limit: int) -> int:
+	var rows := int(level["rows"])
+	var cols := int(level["cols"])
+	var used_cols := {}
+	var used_regions := {}
+	var positions: Array[Vector2i] = []
+	return _search_solutions(level, rows, cols, 0, used_cols, used_regions, positions, limit)
+
+
+func _search_solutions(level: Dictionary, rows: int, cols: int, row: int, used_cols: Dictionary, used_regions: Dictionary, positions: Array[Vector2i], limit: int) -> int:
+	if row >= rows:
+		return 1
+
+	var count := 0
+	for col in range(cols):
+		if used_cols.has(col):
+			continue
+		var region := int(level["regions"][row][col])
+		if used_regions.has(region):
+			continue
+		var candidate := Vector2i(col, row)
+		var adjacent := false
+		for position in positions:
+			if absi(position.x - candidate.x) <= 1 and absi(position.y - candidate.y) <= 1:
+				adjacent = true
+				break
+		if adjacent:
+			continue
+
+		used_cols[col] = true
+		used_regions[region] = true
+		positions.append(candidate)
+		count += _search_solutions(level, rows, cols, row + 1, used_cols, used_regions, positions, limit - count)
+		positions.pop_back()
+		used_cols.erase(col)
+		used_regions.erase(region)
+		if count >= limit:
+			return count
+	return count
 
 
 func _restore_save(had_save: bool, contents: String) -> void:
 	if had_save:
+		if FileAccess.file_exists(SAVE_PATH):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
 		var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 		file.store_string(contents)
+		file = null
 	elif FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))

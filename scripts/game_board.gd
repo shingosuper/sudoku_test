@@ -14,16 +14,19 @@ var cols := 6
 var regions: Array = []
 var cell_states: Array = []
 var error_cells: Dictionary = {}
+var guide_cells: Dictionary = {}
 var region_colors: Array = []
 var piece_symbol := "♛"
 var pulse_cell := Vector2i(-1, -1)
 var pulse_strength := 0.0
+var guide_pulse_cell := Vector2i(-1, -1)
+var guide_pulse_strength := 0.0
 var victory_strength := 0.0
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	custom_minimum_size = Vector2(420, 420)
+	custom_minimum_size = Vector2(300, 300)
 	resized.connect(queue_redraw)
 
 
@@ -34,6 +37,7 @@ func set_level(level: Dictionary, states: Array, colors: Array) -> void:
 	cell_states = states
 	region_colors = colors
 	error_cells.clear()
+	guide_cells.clear()
 	victory_strength = 0.0
 	queue_redraw()
 
@@ -48,12 +52,27 @@ func set_errors(errors: Dictionary) -> void:
 	queue_redraw()
 
 
+func set_guides(guides: Dictionary) -> void:
+	guide_cells = guides
+	queue_redraw()
+
+
 func play_cell_feedback(row: int, col: int) -> void:
 	pulse_cell = Vector2i(col, row)
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_method(_set_pulse, 0.0, 1.0, 0.09)
 	tween.tween_method(_set_pulse, 1.0, 0.0, 0.18)
+
+
+func play_guide_feedback(row: int, col: int) -> void:
+	guide_pulse_cell = Vector2i(col, row)
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_method(_set_guide_pulse, 0.0, 1.0, 0.12)
+	tween.tween_method(_set_guide_pulse, 1.0, 0.15, 0.16)
+	tween.tween_method(_set_guide_pulse, 0.15, 1.0, 0.12)
+	tween.tween_method(_set_guide_pulse, 1.0, 0.0, 0.24)
 
 
 func play_victory() -> void:
@@ -65,6 +84,11 @@ func play_victory() -> void:
 
 func _set_pulse(value: float) -> void:
 	pulse_strength = value
+	queue_redraw()
+
+
+func _set_guide_pulse(value: float) -> void:
+	guide_pulse_strength = value
 	queue_redraw()
 
 
@@ -120,11 +144,23 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 	var cell_key := Vector2i(col, row)
 	if cell_key == pulse_cell:
 		rect = rect.grow(cell_size * 0.045 * pulse_strength)
+	if cell_key == guide_pulse_cell:
+		rect = rect.grow(cell_size * 0.07 * guide_pulse_strength)
 
 	var region_id := int(regions[row][col]) - 1
 	var color: Color = region_colors[region_id % region_colors.size()]
 	if error_cells.has(cell_key):
 		color = color.lerp(Color("#FF5E67"), 0.58)
+	elif guide_cells.has(cell_key):
+		var guide_kind := _guide_kind(cell_key)
+		if guide_kind == "unit":
+			color = color.lerp(Color("#CDE8FF"), 0.42)
+		elif guide_kind == "line":
+			color = color.lerp(Color("#E0F0FF"), 0.34)
+		elif guide_kind == "candidate":
+			color = color.lerp(Color("#D9F8DF"), 0.44)
+		else:
+			color = color.lerp(Color.WHITE, 0.38)
 	elif victory_strength > 0.0:
 		color = color.lerp(Color.WHITE, victory_strength * 0.32)
 
@@ -137,6 +173,19 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 	if error_cells.has(cell_key):
 		box.border_color = Color("#D92F42")
 		box.set_border_width_all(maxi(2, int(cell_size * 0.04)))
+	elif guide_cells.has(cell_key):
+		var guide_kind := _guide_kind(cell_key)
+		if guide_kind == "place":
+			box.border_color = Color("#23845C")
+		elif guide_kind == "exclude" or guide_kind == "exclude_empty":
+			box.border_color = Color("#D98A24")
+		elif guide_kind == "candidate":
+			box.border_color = Color("#48B985")
+		elif guide_kind == "line":
+			box.border_color = Color("#86BDEB")
+		else:
+			box.border_color = Color("#3C8DDE")
+		box.set_border_width_all(maxi(3, int(cell_size * (0.055 + guide_pulse_strength * 0.035))))
 	draw_style_box(box, rect)
 
 	var state: String = cell_states[row][col]
@@ -144,6 +193,14 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 		_draw_piece(rect, cell_size, state == HINT_MARK)
 	elif state == BLOCKED_MARK:
 		_draw_blocked(rect, cell_size)
+
+	if guide_cells.has(cell_key) and _guide_kind(cell_key) == "exclude":
+		_draw_blocked(rect.grow(-cell_size * 0.08), cell_size)
+
+
+func _guide_kind(cell_key: Vector2i) -> String:
+	var value = guide_cells.get(cell_key, "place")
+	return str(value)
 
 
 func _draw_piece(rect: Rect2, cell_size: float, is_hint: bool) -> void:
@@ -165,7 +222,8 @@ func _draw_blocked(rect: Rect2, cell_size: float) -> void:
 
 
 func _board_geometry() -> Dictionary:
-	var board_size := minf(size.x, size.y)
+	var usable_size := Vector2(maxf(1.0, size.x - 18.0), maxf(1.0, size.y - 18.0))
+	var board_size := minf(usable_size.x, usable_size.y)
 	var cell_size := board_size / float(maxi(rows, cols))
 	var actual_size := Vector2(cols * cell_size, rows * cell_size)
 	var board_position := (size - actual_size) * 0.5

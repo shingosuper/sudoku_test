@@ -17,8 +17,26 @@ static func load_levels() -> Array:
 
 	var result: Array = parsed["levels"]
 	for level in result:
+		_normalize_level(level)
 		_validate_level(level)
 	return result
+
+
+static func _normalize_level(level: Dictionary) -> void:
+	var rows := int(level.get("rows", 0))
+	var cols := int(level.get("cols", rows))
+	if not level.has("cols") and rows > 0:
+		level["cols"] = rows
+	if not level.has("targetCount"):
+		level["targetCount"] = level.get("solution", []).size()
+	if not level.has("name") or str(level.get("name", "")).strip_edges() == "":
+		var size_text := "%dx%d" % [rows, cols]
+		var difficulty := str(level.get("difficulty", "")).capitalize()
+		level["name"] = "%s %s" % [difficulty, size_text] if difficulty != "" else size_text
+	if not level.has("tutorial") or str(level.get("tutorial", "")).strip_edges() == "":
+		level["tutorial"] = "放置全部皇冠，满足行、列、颜色区域和相邻规则。"
+	if not level.has("difficulty") or str(level.get("difficulty", "")).strip_edges() == "":
+		level["difficulty"] = "normal"
 
 
 static func _validate_level(level: Dictionary) -> void:
