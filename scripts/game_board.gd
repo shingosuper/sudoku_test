@@ -2,8 +2,11 @@ class_name GameBoard
 extends Control
 
 signal cell_pressed(row: int, col: int)
+signal cell_double_pressed(row: int, col: int)
+signal cell_dragged(row: int, col: int)
 
-const BOARD_INK := Color("#26334A")
+const BOARD_INK := Color("#31506D")
+const BOARD_FRAME := Color("#F8FCFF")
 const EMPTY_MARK := "empty"
 const PIECE_MARK := "piece"
 const BLOCKED_MARK := "blocked"
@@ -20,8 +23,12 @@ var piece_symbol := "♛"
 var pulse_cell := Vector2i(-1, -1)
 var pulse_strength := 0.0
 var guide_pulse_cell := Vector2i(-1, -1)
+var guide_pulse_cells: Dictionary = {}
 var guide_pulse_strength := 0.0
 var victory_strength := 0.0
+var tutorial_mask_enabled := false
+var tutorial_focus_cell := Vector2i(-1, -1)
+var last_drag_cell := Vector2i(-1, -1)
 
 
 func _ready() -> void:
@@ -38,6 +45,8 @@ func set_level(level: Dictionary, states: Array, colors: Array) -> void:
 	region_colors = colors
 	error_cells.clear()
 	guide_cells.clear()
+	tutorial_mask_enabled = false
+	tutorial_focus_cell = Vector2i(-1, -1)
 	victory_strength = 0.0
 	queue_redraw()
 
@@ -57,6 +66,12 @@ func set_guides(guides: Dictionary) -> void:
 	queue_redraw()
 
 
+func set_tutorial_focus(cell: Vector2i, enabled: bool) -> void:
+	tutorial_focus_cell = cell if enabled else Vector2i(-1, -1)
+	tutorial_mask_enabled = enabled and cell.x >= 0 and cell.y >= 0
+	queue_redraw()
+
+
 func play_cell_feedback(row: int, col: int) -> void:
 	pulse_cell = Vector2i(col, row)
 	var tween := create_tween()
@@ -67,12 +82,27 @@ func play_cell_feedback(row: int, col: int) -> void:
 
 func play_guide_feedback(row: int, col: int) -> void:
 	guide_pulse_cell = Vector2i(col, row)
+	guide_pulse_cells = {guide_pulse_cell: true}
+	_play_guide_feedback_tween()
+
+
+func play_guide_feedback_for_cells(cells: Array) -> void:
+	guide_pulse_cells.clear()
+	if cells.is_empty():
+		return
+	guide_pulse_cell = cells[0]
+	for cell in cells:
+		guide_pulse_cells[cell] = true
+	_play_guide_feedback_tween()
+
+
+func _play_guide_feedback_tween() -> void:
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_method(_set_guide_pulse, 0.0, 1.0, 0.12)
-	tween.tween_method(_set_guide_pulse, 1.0, 0.15, 0.16)
-	tween.tween_method(_set_guide_pulse, 0.15, 1.0, 0.12)
-	tween.tween_method(_set_guide_pulse, 1.0, 0.0, 0.24)
+	tween.tween_method(_set_guide_pulse, 0.0, 1.0, 0.22)
+	tween.tween_method(_set_guide_pulse, 1.0, 0.18, 0.30)
+	tween.tween_method(_set_guide_pulse, 0.18, 1.0, 0.22)
+	tween.tween_method(_set_guide_pulse, 1.0, 0.0, 0.36)
 
 
 func play_victory() -> void:
@@ -99,10 +129,26 @@ func _set_victory(value: float) -> void:
 
 func _gui_input(event: InputEvent) -> void:
 	var click_position := Vector2(-1, -1)
+	var is_double_click := false
+	var is_drag := false
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		click_position = event.position
+		is_double_click = event.double_click
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		last_drag_cell = Vector2i(-1, -1)
+		return
+	elif event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT:
+		click_position = event.position
+		is_drag = true
 	elif event is InputEventScreenTouch and event.pressed:
 		click_position = event.position
+		is_double_click = event.double_tap
+	elif event is InputEventScreenTouch and not event.pressed:
+		last_drag_cell = Vector2i(-1, -1)
+		return
+	elif event is InputEventScreenDrag:
+		click_position = event.position
+		is_drag = true
 	else:
 		return
 
@@ -114,7 +160,16 @@ func _gui_input(event: InputEvent) -> void:
 	var col := int((click_position.x - board_rect.position.x) / cell_size)
 	var row := int((click_position.y - board_rect.position.y) / cell_size)
 	if row >= 0 and row < rows and col >= 0 and col < cols:
-		cell_pressed.emit(row, col)
+		var cell := Vector2i(col, row)
+		if is_drag:
+			if cell != last_drag_cell:
+				last_drag_cell = cell
+				cell_dragged.emit(row, col)
+		elif is_double_click:
+			cell_double_pressed.emit(row, col)
+		else:
+			last_drag_cell = cell
+			cell_pressed.emit(row, col)
 		accept_event()
 
 
@@ -126,7 +181,7 @@ func _draw() -> void:
 	var board_rect: Rect2 = geometry["rect"]
 	var cell_size: float = geometry["cell_size"]
 	var outer := StyleBoxFlat.new()
-	outer.bg_color = BOARD_INK.lerp(Color.WHITE, victory_strength * 0.32)
+	outer.bg_color = BOARD_FRAME.lerp(Color.WHITE, victory_strength * 0.32)
 	outer.corner_radius_top_left = 22
 	outer.corner_radius_top_right = 22
 	outer.corner_radius_bottom_left = 22
@@ -144,7 +199,7 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 	var cell_key := Vector2i(col, row)
 	if cell_key == pulse_cell:
 		rect = rect.grow(cell_size * 0.045 * pulse_strength)
-	if cell_key == guide_pulse_cell:
+	if guide_pulse_cells.has(cell_key) or cell_key == guide_pulse_cell:
 		rect = rect.grow(cell_size * 0.07 * guide_pulse_strength)
 
 	var region_id := int(regions[row][col]) - 1
@@ -154,11 +209,11 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 	elif guide_cells.has(cell_key):
 		var guide_kind := _guide_kind(cell_key)
 		if guide_kind == "unit":
-			color = color.lerp(Color("#CDE8FF"), 0.42)
+			color = color.lerp(Color("#DDF3FF"), 0.44)
 		elif guide_kind == "line":
-			color = color.lerp(Color("#E0F0FF"), 0.34)
+			color = color.lerp(Color("#ECF8FF"), 0.38)
 		elif guide_kind == "candidate":
-			color = color.lerp(Color("#D9F8DF"), 0.44)
+			color = color.lerp(Color("#E7FCEB"), 0.48)
 		else:
 			color = color.lerp(Color.WHITE, 0.38)
 	elif victory_strength > 0.0:
@@ -176,15 +231,15 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 	elif guide_cells.has(cell_key):
 		var guide_kind := _guide_kind(cell_key)
 		if guide_kind == "place":
-			box.border_color = Color("#23845C")
+			box.border_color = Color("#2D9E63")
 		elif guide_kind == "exclude" or guide_kind == "exclude_empty":
-			box.border_color = Color("#D98A24")
+			box.border_color = Color("#F2A43A")
 		elif guide_kind == "candidate":
-			box.border_color = Color("#48B985")
+			box.border_color = Color("#5ED982")
 		elif guide_kind == "line":
-			box.border_color = Color("#86BDEB")
+			box.border_color = Color("#9CD5FF")
 		else:
-			box.border_color = Color("#3C8DDE")
+			box.border_color = Color("#5CACF2")
 		box.set_border_width_all(maxi(3, int(cell_size * (0.055 + guide_pulse_strength * 0.035))))
 	draw_style_box(box, rect)
 
@@ -196,6 +251,26 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 
 	if guide_cells.has(cell_key) and _guide_kind(cell_key) == "exclude":
 		_draw_blocked(rect.grow(-cell_size * 0.08), cell_size)
+
+	if tutorial_mask_enabled:
+		if cell_key == tutorial_focus_cell:
+			var focus_box := StyleBoxFlat.new()
+			focus_box.bg_color = Color(1.0, 1.0, 1.0, 0.0)
+			focus_box.border_color = Color("#FFE06F")
+			focus_box.set_border_width_all(maxi(4, int(cell_size * (0.065 + guide_pulse_strength * 0.04))))
+			focus_box.corner_radius_top_left = int(cell_size * 0.16)
+			focus_box.corner_radius_top_right = int(cell_size * 0.16)
+			focus_box.corner_radius_bottom_left = int(cell_size * 0.16)
+			focus_box.corner_radius_bottom_right = int(cell_size * 0.16)
+			draw_style_box(focus_box, rect.grow(cell_size * 0.035))
+		elif not guide_cells.has(cell_key):
+			var mask_box := StyleBoxFlat.new()
+			mask_box.bg_color = Color(0.10, 0.20, 0.30, 0.34)
+			mask_box.corner_radius_top_left = int(cell_size * 0.14)
+			mask_box.corner_radius_top_right = int(cell_size * 0.14)
+			mask_box.corner_radius_bottom_left = int(cell_size * 0.14)
+			mask_box.corner_radius_bottom_right = int(cell_size * 0.14)
+			draw_style_box(mask_box, rect)
 
 
 func _guide_kind(cell_key: Vector2i) -> String:
@@ -209,13 +284,13 @@ func _draw_piece(rect: Rect2, cell_size: float, is_hint: bool) -> void:
 	var font := ThemeDB.fallback_font
 	var font_size := int(cell_size * (0.55 + pulse_strength * 0.05))
 	var baseline := rect.position.y + rect.size.y * 0.69
-	draw_string(font, Vector2(rect.position.x, baseline), piece_symbol, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, font_size, Color("#26334A"))
+	draw_string(font, Vector2(rect.position.x, baseline), piece_symbol, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, font_size, BOARD_INK)
 
 
 func _draw_blocked(rect: Rect2, cell_size: float) -> void:
 	var center := rect.get_center()
 	var radius := cell_size * 0.14
-	var color := Color(0.20, 0.26, 0.35, 0.5)
+	var color := Color(0.25, 0.36, 0.47, 0.48)
 	var width := maxf(2.0, cell_size * 0.035)
 	draw_line(center - Vector2(radius, radius), center + Vector2(radius, radius), color, width, true)
 	draw_line(center + Vector2(radius, -radius), center + Vector2(-radius, radius), color, width, true)

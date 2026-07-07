@@ -7,89 +7,51 @@ const SAVE_VERSION := 3
 const HINT_COST := 5
 const INITIAL_HINT_COUNT := 3
 const WIN_REWARD := 10
-const INK := Color("#26334A")
-const MUTED := Color("#718096")
-const CREAM := Color("#FFF8ED")
+const INK := Color("#31506D")
+const MUTED := Color("#6F88A4")
+const CREAM := Color("#F5FBFF")
 const CARD := Color("#FFFFFF")
-const GREEN := Color("#48B985")
+const GREEN := Color("#5ED982")
+const COACH_NORMAL_COLOR := Color("#4E6680")
+const COACH_TUTORIAL_SIZE := 19
+const COACH_NORMAL_SIZE := 16
+const TUTORIAL_PHASE_PLACE := 0
+const TUTORIAL_PHASE_ADJACENT := 1
+const TUTORIAL_PHASE_ROW_COL := 2
+const TUTORIAL_PHASE_HINT := 3
+const TUTORIAL_PHASE_HINT_PLACE := 4
+const TUTORIAL_PHASE_DONE := 5
 const REGION_COLOR_NAMES = ["黄色", "蓝色", "绿色", "紫色", "红色", "青色", "粉色", "灰蓝色", "橙色"]
 const REGION_COLORS = [
-	Color("#FFE88A"),
-	Color("#70B7FF"),
-	Color("#82D989"),
-	Color("#B59AF1"),
-	Color("#FF8C8C"),
-	Color("#64D8C4"),
-	Color("#F6A6D7"),
-	Color("#A8B8D8"),
-	Color("#FFB56B")
+	Color("#FFD84D"),
+	Color("#5EC8FF"),
+	Color("#61D66B"),
+	Color("#B58CFF"),
+	Color("#FF7F8B"),
+	Color("#4DDDD0"),
+	Color("#FF8ED6"),
+	Color("#9DB7F5"),
+	Color("#FFA94D")
 ]
 
 const TUTORIAL_LEVELS = [
 	{
 		"levelId": -101,
-		"title": "新手教程 1/4",
+		"title": "新手教程",
 		"name": "",
-		"rows": 4,
-		"cols": 4,
-		"targetCount": 3,
-		"tutorial": "请点击该格子",
+		"rows": 5,
+		"cols": 5,
+		"targetCount": 5,
+		"tutorial": "每个颜色区域，有且仅有一个皇冠，双击找到第一个皇冠",
 		"regions": [
-			[1, 1, 2, 2],
-			[1, 1, 2, 2],
-			[3, 3, 4, 4],
-			[3, 3, 4, 4]
+			[3, 2, 2, 4, 4],
+			[3, 2, 4, 4, 4],
+			[3, 2, 1, 5, 5],
+			[3, 3, 5, 5, 5],
+			[3, 3, 5, 5, 5]
 		],
-		"target": [1, 1]
-	},
-	{
-		"levelId": -102,
-		"title": "新手教程 2/4",
-		"name": "",
-		"rows": 4,
-		"cols": 4,
-		"targetCount": 1,
-		"tutorial": "看高亮的这一行和这一列，交叉处就是要放皇冠的格子。",
-		"regions": [
-			[1, 1, 2, 2],
-			[1, 3, 3, 2],
-			[4, 4, 5, 5],
-			[6, 6, 5, 5]
-		],
-		"target": [2, 2]
-	},
-	{
-		"levelId": -103,
-		"title": "新手教程 3/4",
-		"name": "",
-		"rows": 4,
-		"cols": 4,
-		"targetCount": 8,
-		"tutorial": "棋盘上已经有一个皇冠。请把它周围 8 个相邻格都点成 X。",
-		"regions": [
-			[1, 1, 2, 2],
-			[1, 1, 2, 2],
-			[3, 3, 4, 4],
-			[3, 3, 4, 4]
-		],
-		"prefill": [[1, 1]],
-		"target": [1, 1]
-	},
-	{
-		"levelId": -104,
-		"title": "新手教程 4/4",
-		"name": "",
-		"rows": 4,
-		"cols": 4,
-		"targetCount": 4,
-		"tutorial": "棋盘上先放了一个 X。请点击撤销按钮，让它恢复为空白。",
-		"regions": [
-			[1, 1, 2, 2],
-			[1, 1, 2, 2],
-			[3, 3, 4, 4],
-			[3, 3, 4, 4]
-		],
-		"target": [2, 0]
+		"target": [2, 2],
+		"kind": "single_map"
 	}
 ]
 
@@ -113,9 +75,15 @@ var tutorial_started := false
 var tutorial_step_index := 0
 var tutorial_interaction_stage := 0
 var tutorial_button_stage := 0
+var tutorial_solution_index := 0
+var tutorial_active_crown := Vector2i(-1, -1)
+var tutorial_hint_target := Vector2i(-1, -1)
+var tutorial_hint_button_taught := false
 var in_tutorial := false
 var tutorial_hand_cell := Vector2i(-1, -1)
+var tutorial_hand_control: Control
 var tutorial_hand_token := 0
+var tutorial_focus_token := 0
 
 var home_screen: Control
 var game_screen: Control
@@ -136,6 +104,7 @@ var coin_label: Label
 var progress_bar: ProgressBar
 var progress_label: Label
 var coach_label: Label
+var top_home_button: Button
 var undo_button: Button
 var clear_button: Button
 var hint_button: Button
@@ -199,20 +168,20 @@ func _build_home_screen() -> Control:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	var sky := ColorRect.new()
-	sky.color = Color("#75D8FF")
+	sky.color = Color("#BDEFFF")
 	sky.set_anchor(SIDE_RIGHT, 1.0)
 	sky.set_anchor(SIDE_BOTTOM, 0.48)
 	root.add_child(sky)
 
 	var garden := ColorRect.new()
-	garden.color = Color("#75CF57")
+	garden.color = Color("#A9EA7B")
 	garden.set_anchor(SIDE_TOP, 0.48)
 	garden.set_anchor(SIDE_RIGHT, 1.0)
 	garden.set_anchor(SIDE_BOTTOM, 1.0)
 	root.add_child(garden)
 
 	var lake := ColorRect.new()
-	lake.color = Color("#45BEE8")
+	lake.color = Color("#7DDCFF")
 	lake.set_anchor(SIDE_LEFT, 0.0)
 	lake.set_anchor(SIDE_TOP, 0.38)
 	lake.set_anchor(SIDE_RIGHT, 1.0)
@@ -220,7 +189,7 @@ func _build_home_screen() -> Control:
 	root.add_child(lake)
 
 	var path := ColorRect.new()
-	path.color = Color("#D9B061")
+	path.color = Color("#FFE08A")
 	path.set_anchor(SIDE_LEFT, 0.43)
 	path.set_anchor(SIDE_TOP, 0.45)
 	path.set_anchor(SIDE_RIGHT, 0.57)
@@ -274,7 +243,7 @@ func _build_home_castle() -> Control:
 	title.text = "Color Queens"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_color_override("font_color", Color("#FFFFFF"))
-	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.28))
+	title.add_theme_color_override("font_shadow_color", Color(0.18, 0.34, 0.48, 0.22))
 	title.add_theme_constant_override("shadow_offset_x", 0)
 	title.add_theme_constant_override("shadow_offset_y", 3)
 	title.add_theme_font_size_override("font_size", 34)
@@ -285,7 +254,7 @@ func _build_home_castle() -> Control:
 	castle_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	castle_body.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	castle_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	castle_body.add_theme_color_override("font_color", Color("#5A6FA7"))
+	castle_body.add_theme_color_override("font_color", Color("#6FA7E8"))
 	castle_body.add_theme_color_override("font_shadow_color", Color(1.0, 1.0, 1.0, 0.65))
 	castle_body.add_theme_constant_override("shadow_offset_x", 0)
 	castle_body.add_theme_constant_override("shadow_offset_y", 4)
@@ -294,7 +263,7 @@ func _build_home_castle() -> Control:
 
 	home_area_label = Label.new()
 	home_area_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	home_area_label.add_theme_color_override("font_color", Color("#254165"))
+	home_area_label.add_theme_color_override("font_color", Color("#31506D"))
 	home_area_label.add_theme_font_size_override("font_size", 17)
 	castle.add_child(home_area_label)
 	return castle
@@ -362,12 +331,12 @@ func _build_home_primary_buttons() -> Control:
 	column.offset_right = -36
 	column.add_theme_constant_override("separation", 12)
 
-	home_start_button = _royal_home_button("开始关卡", Color("#28A83C"))
+	home_start_button = _royal_home_button("开始关卡", Color("#43C96A"))
 	home_start_button.custom_minimum_size.y = 64
 	home_start_button.pressed.connect(_start_current_flow)
 	column.add_child(home_start_button)
 
-	var newbie := _royal_home_button("新人流程", Color("#F2A51E"))
+	var newbie := _royal_home_button("新人流程", Color("#FFBE45"))
 	newbie.custom_minimum_size.y = 56
 	newbie.pressed.connect(_simulate_new_user_flow)
 	column.add_child(newbie)
@@ -380,7 +349,7 @@ func _build_home_bottom_nav() -> Control:
 	panel.set_anchor(SIDE_RIGHT, 1.0)
 	panel.set_anchor(SIDE_BOTTOM, 1.0)
 	panel.offset_top = -78
-	panel.add_theme_stylebox_override("panel", _button_style(Color("#1679D4"), 0))
+	panel.add_theme_stylebox_override("panel", _button_style(Color("#67B9FF"), 0))
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
@@ -429,7 +398,7 @@ func _build_home_hero() -> Control:
 	var panel := PanelContainer.new()
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.custom_minimum_size.y = 410
-	panel.add_theme_stylebox_override("panel", _card_style(Color("#DDEFFD"), 24, true, 18))
+	panel.add_theme_stylebox_override("panel", _card_style(Color("#EAF8FF"), 24, true, 18))
 
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 12)
@@ -445,7 +414,7 @@ func _build_home_hero() -> Control:
 	var subtitle := Label.new()
 	subtitle.text = "皇冠花园"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_color_override("font_color", Color("#52627A"))
+	subtitle.add_theme_color_override("font_color", Color("#6F88A4"))
 	subtitle.add_theme_font_size_override("font_size", 18)
 	column.add_child(subtitle)
 
@@ -454,13 +423,13 @@ func _build_home_hero() -> Control:
 	castle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	castle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	castle.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	castle.add_theme_color_override("font_color", Color("#385B86"))
+	castle.add_theme_color_override("font_color", Color("#6FA7E8"))
 	castle.add_theme_font_size_override("font_size", 54)
 	column.add_child(castle)
 
 	home_area_label = Label.new()
 	home_area_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	home_area_label.add_theme_color_override("font_color", Color("#385B86"))
+	home_area_label.add_theme_color_override("font_color", Color("#31506D"))
 	home_area_label.add_theme_font_size_override("font_size", 18)
 	column.add_child(home_area_label)
 	return panel
@@ -488,8 +457,8 @@ func _build_home_progress() -> Control:
 	home_progress_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	home_progress_bar.custom_minimum_size.y = 22
 	home_progress_bar.show_percentage = false
-	home_progress_bar.add_theme_stylebox_override("background", _button_style(Color("#E8E3DB"), 11))
-	home_progress_bar.add_theme_stylebox_override("fill", _button_style(Color("#48B985"), 11))
+	home_progress_bar.add_theme_stylebox_override("background", _button_style(Color("#E8F3FC"), 11))
+	home_progress_bar.add_theme_stylebox_override("fill", _button_style(GREEN, 11))
 	row.add_child(home_progress_bar)
 
 	home_progress_label = Label.new()
@@ -505,7 +474,7 @@ func _build_home_actions() -> Control:
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 10)
 
-	home_start_button = _action_button("开始关卡", Color("#FFB84E"))
+	home_start_button = _action_button("开始关卡", Color("#FFD36B"))
 	home_start_button.custom_minimum_size.y = 66
 	home_start_button.add_theme_font_size_override("font_size", 23)
 	home_start_button.pressed.connect(_start_current_flow)
@@ -537,7 +506,7 @@ func _build_home_nav() -> Control:
 	row.custom_minimum_size.y = 54
 	row.add_theme_constant_override("separation", 8)
 
-	var home := _action_button("主页", Color("#EAF8F0"))
+	var home := _action_button("主页", Color("#EAFBF0"))
 	home.disabled = true
 	row.add_child(home)
 
@@ -571,6 +540,8 @@ func _build_game_screen() -> Control:
 	board.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	board.cell_pressed.connect(_on_cell_pressed)
+	board.cell_double_pressed.connect(_on_cell_double_pressed)
+	board.cell_dragged.connect(_on_cell_dragged)
 	content.add_child(board)
 
 	content.add_child(_build_action_bar())
@@ -580,7 +551,7 @@ func _build_game_screen() -> Control:
 func _build_top_bar() -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size.y = 60
-	panel.add_theme_stylebox_override("panel", _card_style(CARD, 18, true))
+	panel.add_theme_stylebox_override("panel", _card_style(Color("#FFFFFF"), 18, true))
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 8)
@@ -593,10 +564,10 @@ func _build_top_bar() -> Control:
 	row.add_theme_constant_override("separation", 5)
 	margin.add_child(row)
 
-	var home_button := _small_button("⌂")
-	home_button.tooltip_text = "返回首页"
-	home_button.pressed.connect(_show_home)
-	row.add_child(home_button)
+	top_home_button = _small_button("⌂")
+	top_home_button.tooltip_text = "返回首页"
+	top_home_button.pressed.connect(_show_home)
+	row.add_child(top_home_button)
 
 	tutorial_skip_button = _small_button("跳")
 	tutorial_skip_button.tooltip_text = "跳过新手教程"
@@ -630,7 +601,7 @@ func _build_progress_row() -> Control:
 
 	var piece := Label.new()
 	piece.text = "♛"
-	piece.add_theme_color_override("font_color", Color("#E4A236"))
+	piece.add_theme_color_override("font_color", Color("#F4AA2C"))
 	piece.add_theme_font_size_override("font_size", 30)
 	piece.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(piece)
@@ -639,8 +610,8 @@ func _build_progress_row() -> Control:
 	progress_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	progress_bar.custom_minimum_size.y = 24
 	progress_bar.show_percentage = false
-	progress_bar.add_theme_stylebox_override("background", _button_style(Color("#E8E3DB"), 12))
-	progress_bar.add_theme_stylebox_override("fill", _button_style(Color("#FFB84E"), 12))
+	progress_bar.add_theme_stylebox_override("background", _button_style(Color("#E8F3FC"), 12))
+	progress_bar.add_theme_stylebox_override("fill", _button_style(Color("#FFD36B"), 12))
 	row.add_child(progress_bar)
 
 	progress_label = Label.new()
@@ -656,16 +627,27 @@ func _build_progress_row() -> Control:
 func _build_coach() -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size.y = 78
-	panel.add_theme_stylebox_override("panel", _button_style(Color("#FFF0C9"), 16))
+	panel.add_theme_stylebox_override("panel", _button_style(Color("#FFF5D8"), 16))
 
 	coach_label = Label.new()
 	coach_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	coach_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	coach_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	coach_label.add_theme_color_override("font_color", Color("#72552B"))
-	coach_label.add_theme_font_size_override("font_size", 13)
+	coach_label.add_theme_color_override("font_color", COACH_NORMAL_COLOR)
+	coach_label.add_theme_font_size_override("font_size", COACH_NORMAL_SIZE)
 	panel.add_child(coach_label)
 	return panel
+
+
+func _set_coach_style(tutorial: bool) -> void:
+	if not coach_label:
+		return
+	if tutorial:
+		coach_label.add_theme_color_override("font_color", INK)
+		coach_label.add_theme_font_size_override("font_size", COACH_TUTORIAL_SIZE)
+	else:
+		coach_label.add_theme_color_override("font_color", COACH_NORMAL_COLOR)
+		coach_label.add_theme_font_size_override("font_size", COACH_NORMAL_SIZE)
 
 
 func _build_action_bar() -> Control:
@@ -681,8 +663,8 @@ func _build_action_bar() -> Control:
 	clear_button.pressed.connect(_clear_board)
 	row.add_child(clear_button)
 
-	hint_button = _action_button("", Color("#EAF8F0"))
-	hint_button.add_theme_color_override("font_color", Color("#23845C"))
+	hint_button = _action_button("", Color("#EAFBF0"))
+	hint_button.add_theme_color_override("font_color", Color("#2D9E63"))
 	hint_button.pressed.connect(_use_hint)
 	row.add_child(hint_button)
 	_update_hint_button()
@@ -692,12 +674,12 @@ func _build_action_bar() -> Control:
 func _build_ad_placeholder() -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size.y = 38
-	panel.add_theme_stylebox_override("panel", _button_style(Color("#EEEAE3"), 12))
+	panel.add_theme_stylebox_override("panel", _button_style(Color("#EDF7FF"), 12))
 	var label := Label.new()
 	label.text = "广告位 · Demo Placeholder"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_color_override("font_color", Color("#AAA39A"))
+	label.add_theme_color_override("font_color", Color("#8EA1B5"))
 	label.add_theme_font_size_override("font_size", 12)
 	panel.add_child(label)
 	return panel
@@ -728,7 +710,7 @@ func _build_completion_overlay() -> void:
 	var crown := Label.new()
 	crown.text = "♛"
 	crown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	crown.add_theme_color_override("font_color", Color("#FFB84E"))
+	crown.add_theme_color_override("font_color", Color("#FFD36B"))
 	crown.add_theme_font_size_override("font_size", 68)
 	column.add_child(crown)
 
@@ -741,11 +723,11 @@ func _build_completion_overlay() -> void:
 
 	reward_label = Label.new()
 	reward_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	reward_label.add_theme_color_override("font_color", Color("#D89427"))
+	reward_label.add_theme_color_override("font_color", Color("#E59D28"))
 	reward_label.add_theme_font_size_override("font_size", 19)
 	column.add_child(reward_label)
 
-	completion_next_button = _action_button("下一关  →", Color("#FFB84E"))
+	completion_next_button = _action_button("下一关  →", Color("#FFD36B"))
 	completion_next_button.custom_minimum_size.y = 58
 	completion_next_button.add_theme_color_override("font_color", INK)
 	completion_next_button.add_theme_font_size_override("font_size", 22)
@@ -771,7 +753,7 @@ func _build_toast() -> void:
 	toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	toast_label.add_theme_color_override("font_color", Color.WHITE)
 	toast_label.add_theme_font_size_override("font_size", 15)
-	toast_label.add_theme_stylebox_override("normal", _button_style(Color("#2F3B50"), 18))
+	toast_label.add_theme_stylebox_override("normal", _button_style(Color("#466A8C"), 18))
 	toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast_label.z_index = 20
 	toast_label.modulate.a = 0.0
@@ -787,7 +769,7 @@ func _build_tutorial_center_popup() -> void:
 	tutorial_center_popup.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	tutorial_center_popup.add_theme_color_override("font_color", Color.WHITE)
 	tutorial_center_popup.add_theme_font_size_override("font_size", 22)
-	tutorial_center_popup.add_theme_stylebox_override("normal", _card_style(Color("#2F3B50"), 18, true, 18))
+	tutorial_center_popup.add_theme_stylebox_override("normal", _card_style(Color("#466A8C"), 18, true, 18))
 	tutorial_center_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tutorial_center_popup.z_index = 21
 	tutorial_center_popup.modulate.a = 0.0
@@ -796,16 +778,16 @@ func _build_tutorial_center_popup() -> void:
 
 func _build_tutorial_hand_pointer() -> void:
 	tutorial_hand_label = Label.new()
-	tutorial_hand_label.text = "☝"
-	tutorial_hand_label.size = Vector2(64, 64)
-	tutorial_hand_label.pivot_offset = Vector2(32, 32)
+	tutorial_hand_label.text = "👆"
+	tutorial_hand_label.size = Vector2(96, 96)
+	tutorial_hand_label.pivot_offset = Vector2(48, 48)
 	tutorial_hand_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tutorial_hand_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	tutorial_hand_label.add_theme_color_override("font_color", Color("#2F3B50"))
-	tutorial_hand_label.add_theme_color_override("font_shadow_color", Color(1.0, 1.0, 1.0, 0.86))
+	tutorial_hand_label.add_theme_color_override("font_color", Color("#466A8C"))
+	tutorial_hand_label.add_theme_color_override("font_shadow_color", Color(0.18, 0.31, 0.43, 0.30))
 	tutorial_hand_label.add_theme_constant_override("shadow_offset_x", 0)
-	tutorial_hand_label.add_theme_constant_override("shadow_offset_y", 3)
-	tutorial_hand_label.add_theme_font_size_override("font_size", 42)
+	tutorial_hand_label.add_theme_constant_override("shadow_offset_y", 5)
+	tutorial_hand_label.add_theme_font_size_override("font_size", 66)
 	tutorial_hand_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tutorial_hand_label.z_index = 22
 	tutorial_hand_label.hide()
@@ -820,7 +802,7 @@ func _build_tutorial_hand_pointer() -> void:
 func _build_help_dialog() -> void:
 	help_dialog = AcceptDialog.new()
 	help_dialog.title = "怎么玩"
-	help_dialog.dialog_text = "在每个颜色区域放置一个皇冠，并同时满足：\n\n• 每一行只有一个皇冠\n• 每一列只有一个皇冠\n• 每个颜色区域只有一个皇冠\n• 皇冠不能八方向相邻\n\n第一次点按标记 X，第二次点按放置皇冠，第三次恢复空白。"
+	help_dialog.dialog_text = "在每个颜色区域放置一个皇冠，并同时满足：\n\n• 每一行只有一个皇冠\n• 每一列只有一个皇冠\n• 每个颜色区域只有一个皇冠\n• 皇冠不能八方向相邻\n\n单击格子标记或取消 X，双击格子放置或取消皇冠。"
 	help_dialog.ok_button_text = "知道了"
 	help_dialog.unresizable = true
 	add_child(help_dialog)
@@ -882,9 +864,10 @@ func _load_level(index: int, allow_resume: bool = false) -> void:
 		clear_button.show()
 	if hint_button:
 		hint_button.show()
+	_restore_action_button_styles()
 	_update_level_picker()
 	coach_label.text = str(current_level.get("tutorial", "放置全部皇冠，满足四条规则。"))
-	coach_label.add_theme_color_override("font_color", Color("#72552B"))
+	_set_coach_style(false)
 	if progress_bar:
 		progress_bar.max_value = int(current_level["targetCount"])
 	board.set_level(current_level, cell_states, REGION_COLORS)
@@ -913,13 +896,38 @@ func _on_cell_pressed(row: int, col: int) -> void:
 		"piece", "hint":
 			cell_states[row][col] = "empty"
 		"blocked":
-			cell_states[row][col] = "piece"
+			cell_states[row][col] = "empty"
 		_:
 			cell_states[row][col] = "empty"
 	board.set_states(cell_states)
 	board.play_cell_feedback(row, col)
 	_validate_and_update(true)
 	_save_game()
+
+
+func _on_cell_double_pressed(row: int, col: int) -> void:
+	if in_tutorial:
+		_on_tutorial_cell_double_pressed(row, col)
+		return
+	if is_completed:
+		return
+	active_hint_step.clear()
+	active_hint_stage = 0
+	board.set_guides({})
+	_push_history()
+	if cell_states[row][col] == "piece" or cell_states[row][col] == "hint":
+		cell_states[row][col] = "empty"
+	else:
+		cell_states[row][col] = "piece"
+	board.set_states(cell_states)
+	board.play_cell_feedback(row, col)
+	_validate_and_update(true)
+	_save_game()
+
+
+func _on_cell_dragged(row: int, col: int) -> void:
+	if in_tutorial:
+		_on_tutorial_cell_dragged(row, col)
 
 
 func _undo() -> void:
@@ -977,7 +985,7 @@ func _use_hint() -> void:
 	if target.x >= 0:
 		board.play_guide_feedback(target.y, target.x)
 	coach_label.text = str(hint["message"])
-	coach_label.add_theme_color_override("font_color", Color("#23845C"))
+	coach_label.add_theme_color_override("font_color", Color("#2D9E63"))
 	_update_coin_label()
 	_update_hint_button()
 	_save_game()
@@ -1003,7 +1011,7 @@ func _validate_and_update(allow_completion: bool) -> void:
 			Input.vibrate_handheld(35)
 	else:
 		coach_label.text = str(current_level.get("tutorial", "放置全部皇冠，满足四条规则。"))
-		coach_label.add_theme_color_override("font_color", Color("#72552B"))
+		coach_label.add_theme_color_override("font_color", COACH_NORMAL_COLOR)
 
 	if allow_completion and pieces.size() == int(current_level["targetCount"]) and conflicts.is_empty():
 		_complete_level()
@@ -1942,9 +1950,13 @@ func _start_tutorial_step(index: int) -> void:
 	in_tutorial = true
 	tutorial_started = true
 	tutorial_step_index = clampi(index, 0, TUTORIAL_LEVELS.size() - 1)
-	tutorial_interaction_stage = 0
+	tutorial_interaction_stage = TUTORIAL_PHASE_PLACE
 	tutorial_button_stage = 0
 	current_level = TUTORIAL_LEVELS[tutorial_step_index]
+	tutorial_solution_index = 0
+	tutorial_active_crown = Vector2i(-1, -1)
+	tutorial_hint_target = _tutorial_solution_cells()[0]
+	tutorial_hint_button_taught = false
 	is_completed = false
 	active_hint_step.clear()
 	active_hint_stage = 0
@@ -1954,11 +1966,11 @@ func _start_tutorial_step(index: int) -> void:
 	cell_states = _blank_states(int(current_level["rows"]), int(current_level["cols"]))
 	for coordinate in current_level.get("prefill", []):
 		cell_states[int(coordinate[0])][int(coordinate[1])] = "piece"
-	if tutorial_step_index == 3:
+	if _tutorial_kind() == "tools":
 		_set_tutorial_button_demo_state(0)
 	level_label.text = str(current_level.get("name", ""))
 	coach_label.text = str(current_level["tutorial"])
-	coach_label.add_theme_color_override("font_color", Color("#72552B"))
+	_set_coach_style(true)
 	if progress_bar:
 		progress_bar.max_value = int(current_level["targetCount"])
 		progress_bar.value = 0
@@ -1977,10 +1989,21 @@ func _start_tutorial_step(index: int) -> void:
 	_set_tutorial_guides()
 	_update_tutorial_action_bar()
 	_show_game()
-	if tutorial_step_index == 0 or tutorial_step_index == 1:
-		call_deferred("_show_tutorial_hand_for_cell", _tutorial_target())
-	elif tutorial_step_index == 2:
-		call_deferred("_show_tutorial_hand_for_cell", _next_tutorial_adjacent_cell())
+	var kind := _tutorial_kind()
+	if kind == "single_map":
+		call_deferred("_focus_tutorial_cell", _tutorial_solution_cells()[0], 0.36)
+	elif kind == "place":
+		call_deferred("_focus_tutorial_cell", _tutorial_target(), 0.36)
+	elif kind == "color":
+		call_deferred("_focus_tutorial_cell", _next_tutorial_color_cell(), 0.36)
+	elif kind == "row_col":
+		call_deferred("_focus_tutorial_cell", _next_tutorial_row_col_cell(), 0.36)
+	elif kind == "adjacent":
+		call_deferred("_focus_tutorial_cell", _next_tutorial_adjacent_cell(), 0.36)
+	elif kind == "adjacent_row_col":
+		call_deferred("_focus_tutorial_cell", _next_tutorial_adjacent_row_col_cell(), 0.36)
+	elif kind == "tools":
+		call_deferred("_focus_tutorial_control", undo_button, 0.24)
 	_update_hint_button()
 	_update_home()
 	_save_game()
@@ -1989,20 +2012,41 @@ func _start_tutorial_step(index: int) -> void:
 func _set_tutorial_guides() -> void:
 	var guides := {}
 	var target := _tutorial_target()
-	match tutorial_step_index:
-		0:
+	match _tutorial_kind():
+		"single_map":
+			if tutorial_interaction_stage == TUTORIAL_PHASE_PLACE or tutorial_interaction_stage == TUTORIAL_PHASE_HINT_PLACE:
+				var place_target := _current_tutorial_place_target()
+				if place_target.x >= 0:
+					guides[place_target] = "place"
+			elif tutorial_interaction_stage == TUTORIAL_PHASE_ADJACENT or tutorial_interaction_stage == TUTORIAL_PHASE_ROW_COL:
+				var exclusion_target := _next_tutorial_single_map_exclusion_cell()
+				if tutorial_interaction_stage == TUTORIAL_PHASE_ADJACENT:
+					for adjacent_cell in _tutorial_single_map_valid_exclusion_cells():
+						guides[adjacent_cell] = "exclude_empty"
+				if tutorial_interaction_stage == TUTORIAL_PHASE_ROW_COL:
+					for line_cell in _tutorial_row_col_cells(tutorial_active_crown):
+						guides[line_cell] = "line"
+				if exclusion_target.x >= 0:
+					guides[exclusion_target] = "exclude_empty"
+		"place":
 			guides[target] = "place"
-		1:
-			for cell in _row_cells(target.y):
-				guides[cell] = "line"
-			for cell in _col_cells(target.x):
-				guides[cell] = "line"
-			guides[target] = "place"
-		2:
+		"color":
+			var color_cell := _next_tutorial_color_cell()
+			if color_cell.x >= 0:
+				guides[color_cell] = "exclude_empty"
+		"row_col":
+			var row_col_cell := _next_tutorial_row_col_cell()
+			if row_col_cell.x >= 0:
+				guides[row_col_cell] = "exclude_empty"
+		"adjacent":
 			var next_cell := _next_tutorial_adjacent_cell()
 			if next_cell.x >= 0:
 				guides[next_cell] = "exclude_empty"
-		3:
+		"adjacent_row_col":
+			var combined_cell := _next_tutorial_adjacent_row_col_cell()
+			if combined_cell.x >= 0:
+				guides[combined_cell] = "exclude_empty"
+		"tools":
 			guides = _tutorial_button_guides()
 	board.set_guides(guides)
 
@@ -2010,21 +2054,53 @@ func _set_tutorial_guides() -> void:
 func _update_tutorial_action_bar() -> void:
 	if not undo_button or not clear_button or not hint_button:
 		return
-	var show_actions := in_tutorial and tutorial_step_index == 3
+	if in_tutorial and _tutorial_kind() == "single_map":
+		undo_button.visible = true
+		clear_button.visible = false
+		hint_button.visible = true
+		undo_button.disabled = move_history.is_empty()
+		hint_button.disabled = tutorial_interaction_stage != TUTORIAL_PHASE_HINT
+		_apply_action_button_style(undo_button, CARD)
+		_apply_action_button_style(hint_button, Color("#FFE06F") if tutorial_interaction_stage == TUTORIAL_PHASE_HINT else Color("#EAFBF0"))
+		hint_button.add_theme_color_override("font_color", INK if tutorial_interaction_stage == TUTORIAL_PHASE_HINT else Color("#2D9E63"))
+		_update_hint_button()
+		if tutorial_interaction_stage == TUTORIAL_PHASE_HINT:
+			coach_label.text = "点击提示，获取线索"
+		return
+	var show_actions := in_tutorial and _tutorial_kind() == "tools"
 	undo_button.visible = show_actions
 	clear_button.visible = show_actions
 	hint_button.visible = show_actions
 	if not show_actions:
+		_restore_action_button_styles()
 		return
 	undo_button.disabled = tutorial_button_stage != 0
 	clear_button.disabled = tutorial_button_stage != 1
 	hint_button.disabled = tutorial_button_stage != 2
+	_update_tutorial_action_button_styles()
 	if tutorial_button_stage == 0:
 		coach_label.text = "棋盘上先放了一个 X。请点击撤销按钮，让它恢复为空白。"
 	elif tutorial_button_stage == 1:
 		coach_label.text = "棋盘上有几处尝试标记。请点击清除按钮，一次清空它们。"
 	elif tutorial_button_stage == 2:
-		coach_label.text = "现在棋盘是空的。请点击提示按钮，看看系统会怎样高亮下一步。"
+		coach_label.text = "点击提示，获取线索"
+
+
+func _update_tutorial_action_button_styles() -> void:
+	_apply_action_button_style(undo_button, Color("#FFE06F") if tutorial_button_stage == 0 else Color("#F6FBFF"))
+	_apply_action_button_style(clear_button, Color("#FFE06F") if tutorial_button_stage == 1 else Color("#F6FBFF"))
+	_apply_action_button_style(hint_button, Color("#FFE06F") if tutorial_button_stage == 2 else Color("#F6FBFF"))
+	hint_button.add_theme_color_override("font_color", INK)
+
+
+func _restore_action_button_styles() -> void:
+	if undo_button:
+		_apply_action_button_style(undo_button, CARD)
+	if clear_button:
+		_apply_action_button_style(clear_button, CARD)
+	if hint_button:
+		_apply_action_button_style(hint_button, Color("#EAFBF0"))
+		hint_button.add_theme_color_override("font_color", Color("#2D9E63"))
 
 
 func _tutorial_target() -> Vector2i:
@@ -2032,46 +2108,89 @@ func _tutorial_target() -> Vector2i:
 	return Vector2i(int(target[1]), int(target[0]))
 
 
+func _tutorial_kind() -> String:
+	return str(current_level.get("kind", "place"))
+
+
 func _on_tutorial_cell_pressed(row: int, col: int) -> void:
 	if is_completed:
 		return
 	var target := _tutorial_target()
-	if tutorial_step_index == 2:
+	var kind := _tutorial_kind()
+	if kind == "single_map":
+		_on_tutorial_single_map_pressed(row, col)
+		return
+	if kind == "color":
+		_on_tutorial_color_cell_pressed(row, col, target)
+		return
+	if kind == "row_col":
+		_on_tutorial_row_col_cell_pressed(row, col, target)
+		return
+	if kind == "adjacent":
 		_on_tutorial_adjacent_cell_pressed(row, col, target)
 		return
-	if tutorial_step_index == 3:
+	if kind == "adjacent_row_col":
+		_on_tutorial_adjacent_row_col_cell_pressed(row, col, target)
+		return
+	if kind == "tools":
 		_on_tutorial_hint_target_pressed(row, col, target)
 		return
 	if Vector2i(col, row) != target:
-		_show_toast("先点高亮的教程格子")
-		_show_tutorial_hand_for_cell(target)
+		_show_toast("先点提示区")
+		_focus_tutorial_cell(target, 0.12)
 		return
-	if tutorial_step_index == 1:
-		cell_states[row][col] = "piece"
-		board.set_states(cell_states)
-		board.play_cell_feedback(row, col)
-		_validate_tutorial_step(row, col)
-		_save_game()
+	if kind == "place":
+		_show_toast("请双击放置皇冠")
+		_focus_tutorial_cell(target, 0.12)
 		return
-	var state: String = cell_states[row][col]
-	match state:
-		"empty":
-			cell_states[row][col] = "blocked"
-		"blocked":
-			cell_states[row][col] = "piece"
-		_:
-			cell_states[row][col] = "empty"
+
+
+func _on_tutorial_cell_double_pressed(row: int, col: int) -> void:
+	if is_completed:
+		return
+	var target := _tutorial_target()
+	var kind := _tutorial_kind()
+	if kind == "single_map":
+		_on_tutorial_single_map_double_pressed(row, col)
+		return
+	if kind != "place" and kind != "tools":
+		_show_toast("这一步请单击提示区标记 X")
+		return
+	if Vector2i(col, row) != target:
+		_show_toast("请双击放置皇冠")
+		_focus_tutorial_cell(target, 0.12)
+		return
+	if kind == "tools" and tutorial_button_stage != 3:
+		_show_toast("先按底部按钮顺序学习：撤销、清除、提示")
+		return
+	cell_states[row][col] = "piece"
 	board.set_states(cell_states)
 	board.play_cell_feedback(row, col)
-	_validate_tutorial_step(row, col)
+	if kind == "tools":
+		board.set_guides({})
+		_hide_tutorial_hand()
+		if progress_bar:
+			progress_bar.value = 4
+		if progress_label:
+			progress_label.text = "4 / 4"
+		_show_tutorial_challenge_ready()
+	else:
+		_validate_tutorial_step(row, col)
 	_save_game()
 
 
-func _on_tutorial_adjacent_cell_pressed(row: int, col: int, crown: Vector2i) -> void:
+func _on_tutorial_cell_dragged(row: int, col: int) -> void:
+	if is_completed:
+		return
+	if _tutorial_kind() == "single_map":
+		_on_tutorial_single_map_exclusion(row, col, true)
+
+
+func _on_tutorial_color_cell_pressed(row: int, col: int, crown: Vector2i) -> void:
 	var cell := Vector2i(col, row)
-	if not _tutorial_adjacent_cells(crown).has(cell):
-		_show_toast("请把皇冠周围的高亮格点成 X")
-		_show_tutorial_hand_for_cell(_next_tutorial_adjacent_cell())
+	if not _tutorial_color_cells(crown).has(cell):
+		_show_toast("请把同色区域里的提示区点成 X")
+		_focus_tutorial_cell(_next_tutorial_color_cell(), 0.12)
 		return
 	if cell_states[row][col] != "blocked":
 		cell_states[row][col] = "blocked"
@@ -2080,7 +2199,59 @@ func _on_tutorial_adjacent_cell_pressed(row: int, col: int, crown: Vector2i) -> 
 	_validate_tutorial_step(row, col)
 	if not is_completed:
 		_set_tutorial_guides()
-		_show_tutorial_hand_for_cell(_next_tutorial_adjacent_cell())
+		_focus_tutorial_cell(_next_tutorial_color_cell(), 0.15)
+	_save_game()
+
+
+func _on_tutorial_row_col_cell_pressed(row: int, col: int, crown: Vector2i) -> void:
+	var cell := Vector2i(col, row)
+	if not _tutorial_row_col_cells(crown).has(cell):
+		_show_toast("请把皇冠同行或同列的提示区点成 X")
+		_focus_tutorial_cell(_next_tutorial_row_col_cell(), 0.12)
+		return
+	if cell_states[row][col] != "blocked":
+		cell_states[row][col] = "blocked"
+	board.set_states(cell_states)
+	board.play_cell_feedback(row, col)
+	_validate_tutorial_step(row, col)
+	if not is_completed:
+		_set_tutorial_guides()
+		_focus_tutorial_cell(_next_tutorial_row_col_cell(), 0.15)
+	_save_game()
+
+
+func _on_tutorial_adjacent_cell_pressed(row: int, col: int, crown: Vector2i) -> void:
+	var cell := Vector2i(col, row)
+	if not _tutorial_adjacent_cells(crown).has(cell):
+		_show_toast("请把皇冠周围的提示区点成 X")
+		_focus_tutorial_cell(_next_tutorial_adjacent_cell(), 0.12)
+		return
+	if cell_states[row][col] != "blocked":
+		cell_states[row][col] = "blocked"
+	board.set_states(cell_states)
+	board.play_cell_feedback(row, col)
+	_validate_tutorial_step(row, col)
+	if not is_completed:
+		_set_tutorial_guides()
+		_focus_tutorial_cell(_next_tutorial_adjacent_cell(), 0.15)
+	_save_game()
+
+
+func _on_tutorial_adjacent_row_col_cell_pressed(row: int, col: int, crown: Vector2i) -> void:
+	var cell := Vector2i(col, row)
+	var expected := _next_tutorial_adjacent_row_col_cell()
+	if cell != expected:
+		_show_toast("请按小手指引，把当前提示区点成 X")
+		_focus_tutorial_cell(expected, 0.12)
+		return
+	if cell_states[row][col] != "blocked":
+		cell_states[row][col] = "blocked"
+	board.set_states(cell_states)
+	board.play_cell_feedback(row, col)
+	_validate_tutorial_step(row, col)
+	if not is_completed:
+		_set_tutorial_guides()
+		_focus_tutorial_cell(_next_tutorial_adjacent_row_col_cell(), 0.15)
 	_save_game()
 
 
@@ -2089,55 +2260,229 @@ func _on_tutorial_hint_target_pressed(row: int, col: int, target: Vector2i) -> v
 		_show_toast("先按底部按钮顺序学习：撤销、清除、提示")
 		return
 	if Vector2i(col, row) != target:
-		_show_toast("请按照提示点击高亮格子")
-		_show_tutorial_hand_for_cell(target)
+		_show_toast("请双击提示区放置皇冠")
+		_focus_tutorial_cell(target, 0.12)
 		return
+	_show_toast("请双击提示区放置皇冠")
+	_focus_tutorial_cell(target, 0.12)
+
+
+func _on_tutorial_single_map_pressed(row: int, col: int) -> void:
+	if tutorial_interaction_stage == TUTORIAL_PHASE_ADJACENT or tutorial_interaction_stage == TUTORIAL_PHASE_ROW_COL:
+		_on_tutorial_single_map_exclusion(row, col, false)
+		return
+	if tutorial_interaction_stage == TUTORIAL_PHASE_HINT:
+		_show_toast("先点击提示，获取线索")
+		_focus_tutorial_control(hint_button, 0.12)
+		return
+	var target := _current_tutorial_place_target()
+	if Vector2i(col, row) == target:
+		_show_toast("请双击放置皇冠")
+	else:
+		_show_toast("请操作提示区")
+	_focus_tutorial_cell(target, 0.12)
+
+
+func _on_tutorial_single_map_double_pressed(row: int, col: int) -> void:
+	if tutorial_interaction_stage != TUTORIAL_PHASE_PLACE and tutorial_interaction_stage != TUTORIAL_PHASE_HINT_PLACE:
+		_show_toast("这一步请把提示区点成 X")
+		_focus_tutorial_cell(_next_tutorial_single_map_exclusion_cell(), 0.12)
+		return
+	var target := _current_tutorial_place_target()
+	if Vector2i(col, row) != target:
+		_show_toast("请双击放置皇冠")
+		_focus_tutorial_cell(target, 0.12)
+		return
+	_push_tutorial_history()
 	cell_states[row][col] = "piece"
+	tutorial_active_crown = target
 	board.set_states(cell_states)
 	board.play_cell_feedback(row, col)
-	board.set_guides({})
-	_hide_tutorial_hand()
-	if progress_bar:
-		progress_bar.value = 4
-	if progress_label:
-		progress_label.text = "4 / 4"
-	_show_tutorial_challenge_ready()
+	_update_tutorial_progress()
+	if tutorial_solution_index == 0:
+		_show_toast("成功找到第一个皇冠")
+	else:
+		_show_toast("成功找到皇冠")
+	tutorial_solution_index += 1
+	if tutorial_solution_index >= _tutorial_solution_cells().size():
+		tutorial_interaction_stage = TUTORIAL_PHASE_DONE
+		board.set_guides({})
+		_hide_tutorial_hand()
+		_show_tutorial_challenge_ready()
+		_save_game()
+		return
+	tutorial_interaction_stage = TUTORIAL_PHASE_ADJACENT
+	if _next_tutorial_single_map_exclusion_cell().x < 0:
+		_advance_tutorial_single_map_after_exclusions()
+		_save_game()
+		return
+	coach_label.text = "皇冠周围不会出现皇冠，滑动排除周围的格子"
+	_set_coach_style(true)
+	_set_tutorial_guides()
+	_update_tutorial_action_bar()
+	_focus_tutorial_cell(_next_tutorial_single_map_exclusion_cell(), 0.15)
 	_save_game()
 
 
+func _on_tutorial_single_map_exclusion(row: int, col: int, from_drag: bool) -> void:
+	if tutorial_interaction_stage != TUTORIAL_PHASE_ADJACENT and tutorial_interaction_stage != TUTORIAL_PHASE_ROW_COL:
+		return
+	var expected := _next_tutorial_single_map_exclusion_cell()
+	if expected.x < 0:
+		_advance_tutorial_single_map_after_exclusions()
+		return
+	var cell := Vector2i(col, row)
+	var valid_cells := _tutorial_single_map_valid_exclusion_cells()
+	if not valid_cells.has(cell):
+		if not from_drag:
+			_show_toast("请点击当前提示区里的格子")
+			_focus_tutorial_cell(expected, 0.12)
+		return
+	if cell_states[row][col] == "empty":
+		_push_tutorial_history()
+		cell_states[row][col] = "blocked"
+	else:
+		_focus_tutorial_cell(expected, 0.12)
+		return
+	board.set_states(cell_states)
+	board.play_cell_feedback(row, col)
+	_update_tutorial_progress()
+	_advance_tutorial_single_map_after_exclusions()
+	_save_game()
+
+
+func _advance_tutorial_single_map_after_exclusions() -> void:
+	if _next_tutorial_single_map_exclusion_cell().x >= 0:
+		_set_tutorial_guides()
+		_focus_tutorial_cell(_next_tutorial_single_map_exclusion_cell(), 0.16)
+		_update_tutorial_action_bar()
+		return
+	if tutorial_interaction_stage == TUTORIAL_PHASE_ADJACENT:
+		tutorial_interaction_stage = TUTORIAL_PHASE_ROW_COL
+		if _next_tutorial_single_map_exclusion_cell().x < 0:
+			_advance_tutorial_single_map_after_exclusions()
+			return
+		coach_label.text = "皇冠的同行同列不会出现皇冠，标记排除"
+		_set_tutorial_guides()
+		_focus_tutorial_cell(_next_tutorial_single_map_exclusion_cell(), 0.12)
+		_update_tutorial_action_bar()
+		return
+	if _next_tutorial_solution_cell() == _tutorial_solution_cells().back():
+		_show_direct_tutorial_crown_clue("每行、每列，都一定会有一个皇冠，双击找到最后一个皇冠")
+		return
+	if tutorial_hint_button_taught:
+		_show_direct_tutorial_crown_clue("每个颜色区域，都有一个皇冠，双击找到皇冠")
+		return
+	tutorial_interaction_stage = TUTORIAL_PHASE_HINT
+	coach_label.text = "点击提示，获取线索"
+	_set_tutorial_guides()
+	_update_tutorial_action_bar()
+	_focus_tutorial_control(hint_button, 0.18)
+
+
+func _tutorial_solution_cells() -> Array[Vector2i]:
+	return [
+		Vector2i(2, 2),
+		Vector2i(1, 0),
+		Vector2i(4, 1),
+		Vector2i(3, 4),
+		Vector2i(0, 3)
+	]
+
+
+func _current_tutorial_place_target() -> Vector2i:
+	if tutorial_interaction_stage == TUTORIAL_PHASE_HINT_PLACE:
+		return tutorial_hint_target
+	var solution := _tutorial_solution_cells()
+	if tutorial_solution_index >= 0 and tutorial_solution_index < solution.size():
+		return solution[tutorial_solution_index]
+	return Vector2i(-1, -1)
+
+
+func _next_tutorial_solution_cell() -> Vector2i:
+	var solution := _tutorial_solution_cells()
+	if tutorial_solution_index >= 0 and tutorial_solution_index < solution.size():
+		return solution[tutorial_solution_index]
+	return Vector2i(-1, -1)
+
+
+func _next_tutorial_single_map_exclusion_cell() -> Vector2i:
+	var crown := tutorial_active_crown
+	if crown.x < 0:
+		return Vector2i(-1, -1)
+	var cells := _tutorial_single_map_valid_exclusion_cells()
+	for cell in cells:
+		if cell_states[cell.y][cell.x] == "empty":
+			return cell
+	return Vector2i(-1, -1)
+
+
+func _tutorial_single_map_valid_exclusion_cells() -> Array[Vector2i]:
+	var crown := tutorial_active_crown
+	if crown.x < 0:
+		return []
+	if tutorial_interaction_stage == TUTORIAL_PHASE_ADJACENT:
+		return _tutorial_adjacent_cells(crown)
+	if tutorial_interaction_stage == TUTORIAL_PHASE_ROW_COL:
+		return _tutorial_row_col_cells(crown)
+	return []
+
+
+func _show_direct_tutorial_crown_clue(message: String) -> void:
+	tutorial_hint_target = _next_tutorial_solution_cell()
+	tutorial_interaction_stage = TUTORIAL_PHASE_HINT_PLACE
+	coach_label.text = message
+	_set_coach_style(true)
+	_set_tutorial_guides()
+	_update_tutorial_action_bar()
+	_focus_tutorial_cell(tutorial_hint_target, 0.18)
+
+
+func _update_tutorial_progress() -> void:
+	if progress_bar:
+		progress_bar.value = _piece_positions().size()
+	if progress_label:
+		progress_label.text = "%d / %d" % [_piece_positions().size(), int(current_level["targetCount"])]
+	if undo_button and in_tutorial and _tutorial_kind() == "single_map":
+		undo_button.disabled = move_history.is_empty()
+
+
 func _validate_tutorial_step(row: int, col: int) -> void:
-	match tutorial_step_index:
-		0:
-			var expected := ["blocked", "piece", "empty"]
-			if cell_states[row][col] == expected[tutorial_interaction_stage]:
-				tutorial_interaction_stage += 1
-				if progress_bar:
-					progress_bar.value = tutorial_interaction_stage
-				if progress_label:
-					progress_label.text = "%d / 3" % tutorial_interaction_stage
-				if tutorial_interaction_stage == 1:
-					coach_label.text = "标注排除成功，再次点击"
-					board.play_guide_feedback(row, col)
-				elif tutorial_interaction_stage == 2:
-					coach_label.text = "标注皇冠成功，再次点击"
-					board.play_guide_feedback(row, col)
-				elif tutorial_interaction_stage >= 3:
-					coach_label.text = "撤销成功，完成操作"
-					_hide_tutorial_hand()
-					_complete_tutorial_step("你学会了点击、放皇冠和取消。")
-		1:
+	match _tutorial_kind():
+		"place":
 			if cell_states[row][col] == "piece":
 				if progress_bar:
 					progress_bar.value = 1
 				if progress_label:
 					progress_label.text = "1 / 1"
-				coach_label.text = "成功找到皇冠"
+				coach_label.text = "皇冠放置成功"
 				_hide_tutorial_hand()
-				board.set_guides(_tutorial_unique_guides(Vector2i(col, row)))
-				_complete_tutorial_step("成功找到皇冠")
+				_complete_tutorial_step("你学会了放置皇冠。")
 			else:
-				coach_label.text = "这一关需要把高亮格点成皇冠。"
-		2:
+				coach_label.text = "这一关需要双击提示区放置皇冠。"
+		"color":
+			var blocked_count := _tutorial_blocked_color_count(_tutorial_target())
+			if progress_bar:
+				progress_bar.value = blocked_count
+			if progress_label:
+				progress_label.text = "%d / 3" % blocked_count
+			if blocked_count >= 3:
+				_hide_tutorial_hand()
+				_complete_tutorial_step("同色区域只能保留一个皇冠")
+			else:
+				coach_label.text = "同色区域已经有皇冠，还剩 %d 个同色格要排除。" % [3 - blocked_count]
+		"row_col":
+			var blocked_count := _tutorial_blocked_row_col_count(_tutorial_target())
+			if progress_bar:
+				progress_bar.value = blocked_count
+			if progress_label:
+				progress_label.text = "%d / 6" % blocked_count
+			if blocked_count >= 6:
+				_hide_tutorial_hand()
+				_complete_tutorial_step("皇冠所在的行和列都已排除")
+			else:
+				coach_label.text = "同行同列不能再放皇冠，还剩 %d 个格要排除。" % [6 - blocked_count]
+		"adjacent":
 			var blocked_count := _tutorial_blocked_adjacent_count(_tutorial_target())
 			if progress_bar:
 				progress_bar.value = blocked_count
@@ -2148,7 +2493,20 @@ func _validate_tutorial_step(row: int, col: int) -> void:
 				_complete_tutorial_step("皇冠的周围全部被排除")
 			else:
 				coach_label.text = "继续把皇冠周围的格子点成 X，还剩 %d 个。" % [8 - blocked_count]
-		3:
+		"adjacent_row_col":
+			var blocked_count := _tutorial_blocked_adjacent_row_col_count(_tutorial_target())
+			if progress_bar:
+				progress_bar.value = blocked_count
+			if progress_label:
+				progress_label.text = "%d / 12" % blocked_count
+			if blocked_count >= 12:
+				_hide_tutorial_hand()
+				_complete_tutorial_step("皇冠周围和同行同列都已排除")
+			elif _tutorial_blocked_adjacent_count(_tutorial_target()) >= 8:
+				coach_label.text = "周围一圈已排除。现在继续排除同行同列剩下的格子。"
+			else:
+				coach_label.text = "先把皇冠周围一圈点成 X，还剩 %d 个。" % [8 - _tutorial_blocked_adjacent_count(_tutorial_target())]
+		"tools":
 			_show_toast("这一关按底部按钮顺序学习：撤销、清除、提示")
 
 
@@ -2162,6 +2520,38 @@ func _tutorial_unique_guides(piece: Vector2i) -> Dictionary:
 			guides[cell] = "exclude"
 	guides[piece] = "place"
 	return guides
+
+
+func _tutorial_color_cells(crown: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	var region_id := int(current_level["regions"][crown.y][crown.x])
+	for row in range(int(current_level["rows"])):
+		for col in range(int(current_level["cols"])):
+			var cell := Vector2i(col, row)
+			if cell != crown and int(current_level["regions"][row][col]) == region_id:
+				cells.append(cell)
+	return cells
+
+
+func _tutorial_row_col_cells(crown: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for col in range(int(current_level["cols"])):
+		var row_cell := Vector2i(col, crown.y)
+		if row_cell != crown:
+			cells.append(row_cell)
+	for row in range(int(current_level["rows"])):
+		var col_cell := Vector2i(crown.x, row)
+		if col_cell != crown:
+			cells.append(col_cell)
+	return cells
+
+
+func _tutorial_adjacent_row_col_cells(crown: Vector2i) -> Array[Vector2i]:
+	var cells := _tutorial_adjacent_cells(crown)
+	for cell in _tutorial_row_col_cells(crown):
+		if not cells.has(cell):
+			cells.append(cell)
+	return cells
 
 
 func _tutorial_adjacent_cells(crown: Vector2i) -> Array[Vector2i]:
@@ -2191,6 +2581,54 @@ func _tutorial_blocked_adjacent_count(crown: Vector2i) -> int:
 	return count
 
 
+func _tutorial_blocked_color_count(crown: Vector2i) -> int:
+	var count := 0
+	for cell in _tutorial_color_cells(crown):
+		if cell_states[cell.y][cell.x] == "blocked":
+			count += 1
+	return count
+
+
+func _tutorial_blocked_row_col_count(crown: Vector2i) -> int:
+	var count := 0
+	for cell in _tutorial_row_col_cells(crown):
+		if cell_states[cell.y][cell.x] == "blocked":
+			count += 1
+	return count
+
+
+func _tutorial_blocked_adjacent_row_col_count(crown: Vector2i) -> int:
+	var count := 0
+	for cell in _tutorial_adjacent_row_col_cells(crown):
+		if cell_states[cell.y][cell.x] == "blocked":
+			count += 1
+	return count
+
+
+func _next_tutorial_color_cell() -> Vector2i:
+	var crown := _tutorial_target()
+	for cell in _tutorial_color_cells(crown):
+		if cell_states[cell.y][cell.x] != "blocked":
+			return cell
+	return Vector2i(-1, -1)
+
+
+func _next_tutorial_row_col_cell() -> Vector2i:
+	var crown := _tutorial_target()
+	for cell in _tutorial_row_col_cells(crown):
+		if cell_states[cell.y][cell.x] != "blocked":
+			return cell
+	return Vector2i(-1, -1)
+
+
+func _next_tutorial_adjacent_row_col_cell() -> Vector2i:
+	var crown := _tutorial_target()
+	for cell in _tutorial_adjacent_row_col_cells(crown):
+		if cell_states[cell.y][cell.x] != "blocked":
+			return cell
+	return Vector2i(-1, -1)
+
+
 func _next_tutorial_adjacent_cell() -> Vector2i:
 	var crown := _tutorial_target()
 	for cell in _tutorial_adjacent_cells(crown):
@@ -2202,48 +2640,189 @@ func _next_tutorial_adjacent_cell() -> Vector2i:
 func _show_tutorial_hand_for_cell(cell: Vector2i) -> void:
 	if not in_tutorial or cell.x < 0 or cell.y < 0 or not board or not tutorial_hand_label:
 		return
+	board.set_tutorial_focus(cell, true)
 	tutorial_hand_cell = cell
+	tutorial_hand_control = null
 	_position_tutorial_hand()
 	tutorial_hand_label.show()
 	tutorial_hand_label.modulate.a = 1.0
 	tutorial_hand_label.scale = Vector2.ONE
 	if tutorial_hand_tween and tutorial_hand_tween.is_valid():
 		tutorial_hand_tween.kill()
-	tutorial_hand_tween = create_tween()
-	tutorial_hand_tween.set_loops()
-	tutorial_hand_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tutorial_hand_tween.tween_property(tutorial_hand_label, "scale", Vector2(1.14, 1.14), 0.38)
-	tutorial_hand_tween.tween_property(tutorial_hand_label, "scale", Vector2.ONE, 0.38)
 	tutorial_hand_token += 1
-	_loop_tutorial_hand_pulse(cell, tutorial_hand_token)
+	_loop_tutorial_hand_demo(cell, tutorial_hand_token)
+
+
+func _show_tutorial_hand_for_control(control: Control) -> void:
+	if not in_tutorial or not control or not tutorial_hand_label:
+		return
+	if board:
+		board.set_tutorial_focus(Vector2i(-1, -1), false)
+	tutorial_hand_cell = Vector2i(-1, -1)
+	tutorial_hand_control = control
+	_position_tutorial_hand()
+	tutorial_hand_label.show()
+	tutorial_hand_label.modulate.a = 1.0
+	tutorial_hand_label.scale = Vector2.ONE
+	if tutorial_hand_tween and tutorial_hand_tween.is_valid():
+		tutorial_hand_tween.kill()
+	tutorial_hand_token += 1
+	_loop_tutorial_control_demo(control, tutorial_hand_token)
+
+
+func _focus_tutorial_cell(cell: Vector2i, delay: float = 0.36) -> void:
+	if not in_tutorial or cell.x < 0 or cell.y < 0 or not board:
+		return
+	_hide_tutorial_hand()
+	tutorial_focus_token += 1
+	var token := tutorial_focus_token
+	board.set_tutorial_focus(cell, true)
+	if _tutorial_kind() == "single_map" and tutorial_interaction_stage == TUTORIAL_PHASE_ROW_COL:
+		board.play_guide_feedback_for_cells(_tutorial_row_col_cells(tutorial_active_crown))
+	else:
+		board.play_guide_feedback(cell.y, cell.x)
+	await get_tree().create_timer(delay).timeout
+	if token == tutorial_focus_token and in_tutorial and not is_completed:
+		_show_tutorial_hand_for_cell(cell)
+
+
+func _focus_tutorial_control(control: Control, delay: float = 0.24) -> void:
+	if not in_tutorial or not control:
+		return
+	_hide_tutorial_hand()
+	tutorial_focus_token += 1
+	var token := tutorial_focus_token
+	await get_tree().create_timer(delay).timeout
+	if token == tutorial_focus_token and in_tutorial and not is_completed and control.visible:
+		_show_tutorial_hand_for_control(control)
 
 
 func _position_tutorial_hand() -> void:
 	if not board or not tutorial_hand_label:
 		return
+	if tutorial_hand_control and tutorial_hand_control.is_inside_tree():
+		var rect := tutorial_hand_control.get_global_rect()
+		var target_point := rect.position + Vector2(rect.size.x * 0.76, rect.size.y * 0.55)
+		tutorial_hand_label.global_position = target_point - Vector2(46, 18)
+		return
 	if tutorial_hand_cell.x < 0 or tutorial_hand_cell.y < 0:
 		return
+	tutorial_hand_label.global_position = _tutorial_hand_position_for_cell(tutorial_hand_cell)
+
+
+func _tutorial_hand_position_for_cell(cell: Vector2i) -> Vector2:
 	var geometry: Dictionary = board._board_geometry()
 	var board_rect: Rect2 = geometry["rect"]
 	var cell_size: float = geometry["cell_size"]
-	var target_point: Vector2 = board.global_position + board_rect.position + Vector2(tutorial_hand_cell.x + 0.75, tutorial_hand_cell.y + 0.75) * cell_size
-	tutorial_hand_label.global_position = target_point - Vector2(32, 10)
+	var target_point: Vector2 = board.global_position + board_rect.position + Vector2(cell.x + 0.75, cell.y + 0.75) * cell_size
+	return target_point - Vector2(48, 22)
 
 
-func _loop_tutorial_hand_pulse(cell: Vector2i, token: int) -> void:
+func _tutorial_hand_anchor_position() -> Vector2:
+	if tutorial_hand_control and tutorial_hand_control.is_inside_tree():
+		var rect := tutorial_hand_control.get_global_rect()
+		var target_point := rect.position + Vector2(rect.size.x * 0.76, rect.size.y * 0.55)
+		return target_point - Vector2(46, 18)
+	if tutorial_hand_cell.x >= 0 and tutorial_hand_cell.y >= 0:
+		return _tutorial_hand_position_for_cell(tutorial_hand_cell)
+	return tutorial_hand_label.global_position
+
+
+func _loop_tutorial_hand_demo(cell: Vector2i, token: int) -> void:
 	while token == tutorial_hand_token and tutorial_hand_label and tutorial_hand_label.visible:
-		board.play_guide_feedback(cell.y, cell.x)
-		await get_tree().create_timer(0.9).timeout
+		if _tutorial_kind() == "single_map" and tutorial_interaction_stage == TUTORIAL_PHASE_ROW_COL:
+			board.play_guide_feedback_for_cells(_tutorial_row_col_cells(tutorial_active_crown))
+		else:
+			board.play_guide_feedback(cell.y, cell.x)
+		var action := _tutorial_hand_cell_action()
+		if action == "slide":
+			await _animate_tutorial_hand_slide(cell, token)
+		elif action == "double":
+			await _animate_tutorial_hand_taps(2, token)
+		else:
+			await _animate_tutorial_hand_taps(1, token)
+		await get_tree().create_timer(1.5).timeout
+
+
+func _loop_tutorial_control_demo(control: Control, token: int) -> void:
+	while token == tutorial_hand_token and tutorial_hand_label and tutorial_hand_label.visible and control and control.visible:
+		_position_tutorial_hand()
+		await _animate_tutorial_hand_taps(1, token)
+		await get_tree().create_timer(1.5).timeout
+
+
+func _tutorial_hand_cell_action() -> String:
+	if _tutorial_kind() == "single_map":
+		if tutorial_interaction_stage == TUTORIAL_PHASE_PLACE or tutorial_interaction_stage == TUTORIAL_PHASE_HINT_PLACE:
+			return "double"
+		if tutorial_interaction_stage == TUTORIAL_PHASE_ROW_COL:
+			return "single"
+		if tutorial_interaction_stage == TUTORIAL_PHASE_ADJACENT:
+			return "slide"
+	return "single"
+
+
+func _animate_tutorial_hand_taps(count: int, token: int) -> void:
+	for index in range(count):
+		if token != tutorial_hand_token or not tutorial_hand_label or not tutorial_hand_label.visible:
+			return
+		var base_position := _tutorial_hand_anchor_position()
+		tutorial_hand_label.global_position = base_position
+		tutorial_hand_label.scale = Vector2.ONE
+		tutorial_hand_tween = create_tween()
+		tutorial_hand_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tutorial_hand_tween.parallel().tween_property(tutorial_hand_label, "scale", Vector2(0.84, 0.84), 0.13)
+		tutorial_hand_tween.parallel().tween_property(tutorial_hand_label, "global_position", base_position + Vector2(0, 8), 0.13)
+		tutorial_hand_tween.tween_property(tutorial_hand_label, "scale", Vector2(1.10, 1.10), 0.16)
+		tutorial_hand_tween.parallel().tween_property(tutorial_hand_label, "global_position", base_position, 0.16)
+		tutorial_hand_tween.tween_property(tutorial_hand_label, "scale", Vector2.ONE, 0.12)
+		await tutorial_hand_tween.finished
+		if token == tutorial_hand_token and tutorial_hand_label and tutorial_hand_label.visible:
+			tutorial_hand_label.global_position = base_position
+			tutorial_hand_label.scale = Vector2.ONE
+		if index < count - 1:
+			await get_tree().create_timer(0.20).timeout
+
+
+func _animate_tutorial_hand_slide(cell: Vector2i, token: int) -> void:
+	var end_cell := _tutorial_slide_end_cell(cell)
+	var start_position := _tutorial_hand_position_for_cell(cell)
+	var end_position := _tutorial_hand_position_for_cell(end_cell)
+	tutorial_hand_label.global_position = start_position
+	tutorial_hand_label.scale = Vector2.ONE
+	tutorial_hand_tween = create_tween()
+	tutorial_hand_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tutorial_hand_tween.tween_property(tutorial_hand_label, "scale", Vector2(0.94, 0.94), 0.18)
+	tutorial_hand_tween.tween_property(tutorial_hand_label, "global_position", end_position, 0.92)
+	tutorial_hand_tween.parallel().tween_property(tutorial_hand_label, "scale", Vector2(1.07, 1.07), 0.92)
+	tutorial_hand_tween.tween_property(tutorial_hand_label, "scale", Vector2.ONE, 0.18)
+	await tutorial_hand_tween.finished
+	if token == tutorial_hand_token and tutorial_hand_label and tutorial_hand_label.visible:
+		tutorial_hand_label.global_position = start_position
+
+
+func _tutorial_slide_end_cell(start_cell: Vector2i) -> Vector2i:
+	for cell in _tutorial_single_map_valid_exclusion_cells():
+		if cell != start_cell and cell_states[cell.y][cell.x] == "empty":
+			return cell
+	var rows := int(current_level.get("rows", 0))
+	var cols := int(current_level.get("cols", 0))
+	var fallback := Vector2i(clampi(start_cell.x + 1, 0, cols - 1), clampi(start_cell.y + 1, 0, rows - 1))
+	return fallback
 
 
 func _hide_tutorial_hand() -> void:
+	tutorial_focus_token += 1
 	tutorial_hand_token += 1
 	tutorial_hand_cell = Vector2i(-1, -1)
+	tutorial_hand_control = null
 	if tutorial_hand_tween and tutorial_hand_tween.is_valid():
 		tutorial_hand_tween.kill()
 	if tutorial_hand_label:
 		tutorial_hand_label.hide()
 		tutorial_hand_label.scale = Vector2.ONE
+	if board:
+		board.set_tutorial_focus(Vector2i(-1, -1), false)
 
 
 func _tutorial_undo_demo_cell() -> Vector2i:
@@ -2272,7 +2851,7 @@ func _tutorial_button_guides() -> Dictionary:
 		guides[_tutorial_undo_demo_cell()] = "exclude"
 	elif tutorial_button_stage == 1:
 		for cell in _tutorial_clear_demo_cells():
-			guides[cell] = "exclude"
+			guides[cell] = "place" if cell_states[cell.y][cell.x] == "piece" else "exclude"
 	else:
 		guides[_tutorial_target()] = "candidate"
 	return guides
@@ -2288,8 +2867,26 @@ func _refresh_tutorial_button_demo() -> void:
 
 
 func _use_tutorial_undo() -> void:
-	if tutorial_step_index != 3:
-		_show_toast("教程关卡中请按高亮提示操作")
+	if _tutorial_kind() == "single_map":
+		if move_history.is_empty():
+			_show_toast("暂无可撤销的操作")
+			return
+		var snapshot: Dictionary = move_history.pop_back()
+		cell_states = snapshot["states"]
+		tutorial_interaction_stage = int(snapshot["phase"])
+		tutorial_solution_index = int(snapshot["solutionIndex"])
+		tutorial_active_crown = snapshot["activeCrown"]
+		tutorial_hint_target = snapshot["hintTarget"]
+		tutorial_hint_button_taught = bool(snapshot.get("hintButtonTaught", tutorial_hint_button_taught))
+		board.set_states(cell_states)
+		_update_tutorial_progress()
+		_set_tutorial_guides()
+		_update_tutorial_action_bar()
+		_focus_current_single_map_tutorial_target(0.12)
+		_save_game()
+		return
+	if _tutorial_kind() != "tools":
+		_show_toast("教程关卡中请按提示区操作")
 		return
 	if tutorial_button_stage != 0:
 		_show_toast("先按当前高亮的按钮")
@@ -2303,10 +2900,14 @@ func _use_tutorial_undo() -> void:
 	_set_tutorial_button_demo_state(1)
 	_refresh_tutorial_button_demo()
 	_update_tutorial_action_bar()
+	_focus_tutorial_control(clear_button, 0.18)
 
 
 func _use_tutorial_clear() -> void:
-	if tutorial_step_index != 3:
+	if _tutorial_kind() == "single_map":
+		_show_toast("新手教程里请跟随高亮完成操作")
+		return
+	if _tutorial_kind() != "tools":
 		_start_tutorial_step(tutorial_step_index)
 		_show_toast("已重来本步教程")
 		return
@@ -2318,11 +2919,21 @@ func _use_tutorial_clear() -> void:
 	_refresh_tutorial_button_demo()
 	_show_toast("清除：所有尝试标记已清空。")
 	_update_tutorial_action_bar()
+	_focus_tutorial_control(hint_button, 0.18)
 
 
 func _use_tutorial_hint() -> void:
-	if tutorial_step_index != 3:
-		_show_toast("提示会在第 4 个教程关中演示")
+	if _tutorial_kind() == "single_map":
+		if tutorial_interaction_stage != TUTORIAL_PHASE_HINT:
+			_show_toast("当前还不需要提示，先完成提示区操作")
+			_focus_current_single_map_tutorial_target(0.12)
+			return
+		tutorial_hint_button_taught = true
+		_show_direct_tutorial_crown_clue("每个颜色区域，都有一个皇冠，双击找到皇冠")
+		_save_game()
+		return
+	if _tutorial_kind() != "tools":
+		_show_toast("提示会在最后一个教程关中演示")
 		return
 	if tutorial_button_stage != 2:
 		_show_toast("先学习撤销和清除，再使用提示")
@@ -2334,9 +2945,9 @@ func _use_tutorial_hint() -> void:
 		target: "place"
 	})
 	board.play_guide_feedback(target.y, target.x)
-	_show_tutorial_hand_for_cell(target)
-	coach_label.text = "提示：这个格子当前可以放皇冠。请按照提示点击高亮格子。"
-	coach_label.add_theme_color_override("font_color", Color("#23845C"))
+	_focus_tutorial_cell(target, 0.18)
+	coach_label.text = "每个颜色区域，都有一个皇冠，双击找到皇冠"
+	_set_coach_style(true)
 	tutorial_button_stage = 3
 	_update_tutorial_action_bar()
 	if progress_bar:
@@ -2346,10 +2957,32 @@ func _use_tutorial_hint() -> void:
 	_save_game()
 
 
+func _focus_current_single_map_tutorial_target(delay: float = 0.18) -> void:
+	if tutorial_interaction_stage == TUTORIAL_PHASE_PLACE or tutorial_interaction_stage == TUTORIAL_PHASE_HINT_PLACE:
+		_focus_tutorial_cell(_current_tutorial_place_target(), delay)
+	elif tutorial_interaction_stage == TUTORIAL_PHASE_ADJACENT or tutorial_interaction_stage == TUTORIAL_PHASE_ROW_COL:
+		_focus_tutorial_cell(_next_tutorial_single_map_exclusion_cell(), delay)
+	elif tutorial_interaction_stage == TUTORIAL_PHASE_HINT:
+		_focus_tutorial_control(hint_button, delay)
+
+
+func _push_tutorial_history() -> void:
+	move_history.append({
+		"states": cell_states.duplicate(true),
+		"phase": tutorial_interaction_stage,
+		"solutionIndex": tutorial_solution_index,
+		"activeCrown": tutorial_active_crown,
+		"hintTarget": tutorial_hint_target,
+		"hintButtonTaught": tutorial_hint_button_taught
+	})
+	if move_history.size() > 100:
+		move_history.pop_front()
+
+
 func _show_tutorial_challenge_ready() -> void:
 	is_completed = true
 	coach_label.text = "已经了解全部规则，开始真正的挑战吧！"
-	coach_label.add_theme_color_override("font_color", Color("#23845C"))
+	_set_coach_style(true)
 	board.play_victory()
 	if undo_button:
 		undo_button.hide()
@@ -2372,7 +3005,7 @@ func _complete_tutorial_step(message: String) -> void:
 	is_completed = true
 	board.play_victory()
 	_save_game()
-	if tutorial_step_index == 2:
+	if _tutorial_kind() == "adjacent":
 		_show_tutorial_center_popup("皇冠的周围全部被排除")
 	else:
 		_show_toast("%s 完成：%s" % [str(current_level["title"]), message])
@@ -2632,10 +3265,14 @@ func _update_tutorial_button() -> void:
 	if not tutorial_skip_button:
 		return
 	if in_tutorial:
-		tutorial_skip_button.text = "跳"
+		if top_home_button:
+			top_home_button.hide()
+		tutorial_skip_button.text = "跳过"
 		tutorial_skip_button.tooltip_text = "跳过新手教程"
 		tutorial_skip_button.show()
 	else:
+		if top_home_button:
+			top_home_button.show()
 		tutorial_skip_button.hide()
 
 
@@ -2712,9 +3349,9 @@ func _small_button(text: String) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_font_size_override("font_size", 18)
 	button.add_theme_color_override("font_color", INK)
-	button.add_theme_stylebox_override("normal", _button_style(Color("#F1F4F7"), 13))
-	button.add_theme_stylebox_override("hover", _button_style(Color("#E7EDF2"), 13))
-	button.add_theme_stylebox_override("pressed", _button_style(Color("#DDE5EC"), 13))
+	button.add_theme_stylebox_override("normal", _button_style(Color("#F6FBFF"), 13))
+	button.add_theme_stylebox_override("hover", _button_style(Color("#EAF6FF"), 13))
+	button.add_theme_stylebox_override("pressed", _button_style(Color("#DCEEFF"), 13))
 	return button
 
 
@@ -2738,8 +3375,8 @@ func _floating_home_button(text: String) -> Button:
 	button.add_theme_font_size_override("font_size", 20)
 	button.add_theme_color_override("font_color", INK)
 	button.add_theme_stylebox_override("normal", _card_style(Color("#FFFFFF"), 18, true))
-	button.add_theme_stylebox_override("hover", _card_style(Color("#F5F8FC"), 18, true))
-	button.add_theme_stylebox_override("pressed", _button_style(Color("#DFE8F2"), 18))
+	button.add_theme_stylebox_override("hover", _card_style(Color("#F4FBFF"), 18, true))
+	button.add_theme_stylebox_override("pressed", _button_style(Color("#E1F2FF"), 18))
 	return button
 
 
@@ -2766,10 +3403,10 @@ func _nav_button(icon: String, label_text: String) -> Button:
 	button.add_theme_font_size_override("font_size", 14)
 	button.add_theme_color_override("font_color", Color.WHITE)
 	button.add_theme_color_override("font_disabled_color", Color("#DCEBFF"))
-	button.add_theme_stylebox_override("normal", _button_style(Color("#2189E6"), 12))
-	button.add_theme_stylebox_override("hover", _button_style(Color("#3297F0"), 12))
-	button.add_theme_stylebox_override("pressed", _button_style(Color("#1069B7"), 12))
-	button.add_theme_stylebox_override("disabled", _button_style(Color("#0F63B1"), 12))
+	button.add_theme_stylebox_override("normal", _button_style(Color("#52AFFF"), 12))
+	button.add_theme_stylebox_override("hover", _button_style(Color("#6BBCFF"), 12))
+	button.add_theme_stylebox_override("pressed", _button_style(Color("#348DE6"), 12))
+	button.add_theme_stylebox_override("disabled", _button_style(Color("#61AEEB"), 12))
 	return button
 
 
@@ -2780,12 +3417,18 @@ func _action_button(text: String, color: Color = CARD) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_font_size_override("font_size", 17)
 	button.add_theme_color_override("font_color", INK)
-	button.add_theme_color_override("font_disabled_color", Color("#B9BEC6"))
+	button.add_theme_color_override("font_disabled_color", Color("#A8B7C8"))
+	_apply_action_button_style(button, color)
+	return button
+
+
+func _apply_action_button_style(button: Button, color: Color) -> void:
+	if not button:
+		return
 	button.add_theme_stylebox_override("normal", _card_style(color, 20, true))
 	button.add_theme_stylebox_override("hover", _card_style(color.lightened(0.04), 20, true))
 	button.add_theme_stylebox_override("pressed", _button_style(color.darkened(0.05), 20))
-	button.add_theme_stylebox_override("disabled", _button_style(Color("#EEECE8"), 20))
-	return button
+	button.add_theme_stylebox_override("disabled", _button_style(Color("#EEF5FB"), 20))
 
 
 func _button_style(color: Color, radius: int) -> StyleBoxFlat:
@@ -2801,9 +3444,9 @@ func _button_style(color: Color, radius: int) -> StyleBoxFlat:
 func _card_style(color: Color, radius: int, shadow: bool = false, padding: int = 0) -> StyleBoxFlat:
 	var style := _button_style(color, radius)
 	if shadow:
-		style.shadow_color = Color(0.20, 0.23, 0.30, 0.12)
-		style.shadow_size = 7
-		style.shadow_offset = Vector2(0, 3)
+		style.shadow_color = Color(0.23, 0.42, 0.58, 0.10)
+		style.shadow_size = 6
+		style.shadow_offset = Vector2(0, 2)
 	if padding > 0:
 		style.content_margin_left = padding
 		style.content_margin_right = padding

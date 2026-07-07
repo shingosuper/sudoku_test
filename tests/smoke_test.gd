@@ -35,9 +35,10 @@ func _run() -> void:
 	game._on_cell_pressed(0, 0)
 	assert(game.cell_states[0][0] == "blocked", "First tap must place an exclusion mark")
 	game._on_cell_pressed(0, 0)
-	assert(game.cell_states[0][0] == "piece", "Second tap must place a piece")
-	game._on_cell_pressed(0, 1)
-	game._on_cell_pressed(0, 1)
+	assert(game.cell_states[0][0] == "empty", "Second tap must clear an exclusion mark")
+	game._on_cell_double_pressed(0, 0)
+	assert(game.cell_states[0][0] == "piece", "Double tap must place a piece")
+	game._on_cell_double_pressed(0, 1)
 	assert(game.board.error_cells.size() == 2, "Two pieces in one row must conflict")
 	game._undo()
 	assert(game._piece_positions().size() == 1, "Undo must restore the previous board")
@@ -57,8 +58,7 @@ func _run() -> void:
 
 	game._load_level(0)
 	for coordinate in game.current_level["solution"]:
-		game._on_cell_pressed(int(coordinate[0]), int(coordinate[1]))
-		game._on_cell_pressed(int(coordinate[0]), int(coordinate[1]))
+		game._on_cell_double_pressed(int(coordinate[0]), int(coordinate[1]))
 	assert(game.is_completed, "A valid solution must complete the level")
 
 	await create_timer(0.8).timeout
