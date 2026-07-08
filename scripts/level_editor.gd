@@ -7,15 +7,16 @@ const MUTED := Color("#718096")
 const CREAM := Color("#FFF8ED")
 const CARD := Color("#FFFFFF")
 const REGION_COLORS = [
-	Color("#FFE88A"),
-	Color("#70B7FF"),
-	Color("#82D989"),
-	Color("#B59AF1"),
-	Color("#FF8C8C"),
-	Color("#64D8C4"),
-	Color("#F6A6D7"),
-	Color("#A8B8D8"),
-	Color("#FFB56B")
+	Color("#E53935"),
+	Color("#1E88E5"),
+	Color("#43A047"),
+	Color("#FDD835"),
+	Color("#8E24AA"),
+	Color("#00ACC1"),
+	Color("#FB8C00"),
+	Color("#3949AB"),
+	Color("#7CB342"),
+	Color("#D81B60")
 ]
 
 var levels: Array = []
@@ -202,6 +203,7 @@ func _rebuild_board() -> void:
 			button.pressed.connect(_on_cell_pressed.bind(row, col))
 			board.add_child(button)
 	_refresh_cells()
+
 
 
 func _refresh_cells() -> void:

@@ -2,12 +2,17 @@ class_name GameBoard
 extends Control
 
 signal cell_pressed(row: int, col: int)
+signal cell_double_pressed(row: int, col: int)
+signal cell_drag_started(row: int, col: int)
+signal cell_dragged(row: int, col: int)
+signal cell_drag_ended()
 
 const BOARD_INK := Color("#26334A")
 const EMPTY_MARK := "empty"
 const PIECE_MARK := "piece"
 const BLOCKED_MARK := "blocked"
 const HINT_MARK := "hint"
+const WRONG_MARK := "wrong"
 
 var rows := 6
 var cols := 6
@@ -20,8 +25,16 @@ var piece_symbol := "♛"
 var pulse_cell := Vector2i(-1, -1)
 var pulse_strength := 0.0
 var guide_pulse_cell := Vector2i(-1, -1)
+var guide_pulse_cells: Dictionary = {}
 var guide_pulse_strength := 0.0
 var victory_strength := 0.0
+var tutorial_mask_enabled := false
+var tutorial_focus_cell := Vector2i(-1, -1)
+var press_cell := Vector2i(-1, -1)
+var last_drag_cell := Vector2i(-1, -1)
+var tracking_press := false
+var dragging := false
+
 
 
 func _ready() -> void:
@@ -38,6 +51,8 @@ func set_level(level: Dictionary, states: Array, colors: Array) -> void:
 	region_colors = colors
 	error_cells.clear()
 	guide_cells.clear()
+	tutorial_mask_enabled = false
+	tutorial_focus_cell = Vector2i(-1, -1)
 	victory_strength = 0.0
 	queue_redraw()
 
@@ -57,6 +72,12 @@ func set_guides(guides: Dictionary) -> void:
 	queue_redraw()
 
 
+func set_tutorial_focus(cell: Vector2i, enabled: bool) -> void:
+	tutorial_focus_cell = cell if enabled else Vector2i(-1, -1)
+	tutorial_mask_enabled = enabled and cell.x >= 0 and cell.y >= 0
+	queue_redraw()
+
+
 func play_cell_feedback(row: int, col: int) -> void:
 	pulse_cell = Vector2i(col, row)
 	var tween := create_tween()
@@ -67,12 +88,27 @@ func play_cell_feedback(row: int, col: int) -> void:
 
 func play_guide_feedback(row: int, col: int) -> void:
 	guide_pulse_cell = Vector2i(col, row)
+	guide_pulse_cells = {guide_pulse_cell: true}
+	_play_guide_feedback_tween()
+
+
+func play_guide_feedback_for_cells(cells: Array) -> void:
+	guide_pulse_cells.clear()
+	if cells.is_empty():
+		return
+	guide_pulse_cell = cells[0]
+	for cell in cells:
+		guide_pulse_cells[cell] = true
+	_play_guide_feedback_tween()
+
+
+func _play_guide_feedback_tween() -> void:
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_method(_set_guide_pulse, 0.0, 1.0, 0.12)
-	tween.tween_method(_set_guide_pulse, 1.0, 0.15, 0.16)
-	tween.tween_method(_set_guide_pulse, 0.15, 1.0, 0.12)
-	tween.tween_method(_set_guide_pulse, 1.0, 0.0, 0.24)
+	tween.tween_method(_set_guide_pulse, 0.0, 1.0, 0.22)
+	tween.tween_method(_set_guide_pulse, 1.0, 0.18, 0.30)
+	tween.tween_method(_set_guide_pulse, 0.18, 1.0, 0.22)
+	tween.tween_method(_set_guide_pulse, 1.0, 0.0, 0.36)
 
 
 func play_victory() -> void:
@@ -98,25 +134,86 @@ func _set_victory(value: float) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
-	var click_position := Vector2(-1, -1)
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		click_position = event.position
-	elif event is InputEventScreenTouch and event.pressed:
-		click_position = event.position
-	else:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_start_pointer(event.position, event.double_click)
+		else:
+			_finish_pointer(event.position)
+		accept_event()
 		return
-
-	var geometry := _board_geometry()
-	var board_rect: Rect2 = geometry["rect"]
-	if not board_rect.has_point(click_position):
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_start_pointer(event.position, event.double_tap)
+		else:
+			_finish_pointer(event.position)
+		accept_event()
 		return
-	var cell_size: float = geometry["cell_size"]
-	var col := int((click_position.x - board_rect.position.x) / cell_size)
-	var row := int((click_position.y - board_rect.position.y) / cell_size)
-	if row >= 0 and row < rows and col >= 0 and col < cols:
-		cell_pressed.emit(row, col)
+	if event is InputEventMouseMotion and tracking_press and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+		_update_drag(event.position)
+		accept_event()
+		return
+	if event is InputEventScreenDrag and tracking_press:
+		_update_drag(event.position)
 		accept_event()
 
+
+func _start_pointer(position: Vector2, is_double: bool) -> void:
+	var cell := _cell_at_position(position)
+	if cell.x < 0:
+		_reset_pointer()
+		return
+	if is_double:
+		_reset_pointer()
+		cell_double_pressed.emit(cell.y, cell.x)
+		return
+	tracking_press = true
+	dragging = false
+	press_cell = cell
+	last_drag_cell = cell
+
+
+func _finish_pointer(position: Vector2) -> void:
+	if not tracking_press:
+		_reset_pointer()
+		return
+	if dragging:
+		cell_drag_ended.emit()
+	else:
+		var cell := _cell_at_position(position)
+		if cell == press_cell:
+			cell_pressed.emit(cell.y, cell.x)
+	_reset_pointer()
+
+
+func _update_drag(position: Vector2) -> void:
+	var cell := _cell_at_position(position)
+	if cell.x < 0 or cell == last_drag_cell:
+		return
+	if not dragging:
+		dragging = true
+		cell_drag_started.emit(press_cell.y, press_cell.x)
+	last_drag_cell = cell
+	cell_dragged.emit(cell.y, cell.x)
+
+
+func _reset_pointer() -> void:
+	tracking_press = false
+	dragging = false
+	press_cell = Vector2i(-1, -1)
+	last_drag_cell = Vector2i(-1, -1)
+
+
+func _cell_at_position(position: Vector2) -> Vector2i:
+	var geometry := _board_geometry()
+	var board_rect: Rect2 = geometry["rect"]
+	if not board_rect.has_point(position):
+		return Vector2i(-1, -1)
+	var cell_size: float = geometry["cell_size"]
+	var col := int((position.x - board_rect.position.x) / cell_size)
+	var row := int((position.y - board_rect.position.y) / cell_size)
+	if row >= 0 and row < rows and col >= 0 and col < cols:
+		return Vector2i(col, row)
+	return Vector2i(-1, -1)
 
 func _draw() -> void:
 	if regions.is_empty() or cell_states.is_empty():
@@ -144,7 +241,7 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 	var cell_key := Vector2i(col, row)
 	if cell_key == pulse_cell:
 		rect = rect.grow(cell_size * 0.045 * pulse_strength)
-	if cell_key == guide_pulse_cell:
+	if guide_pulse_cells.has(cell_key) or cell_key == guide_pulse_cell:
 		rect = rect.grow(cell_size * 0.07 * guide_pulse_strength)
 
 	var region_id := int(regions[row][col]) - 1
@@ -193,9 +290,31 @@ func _draw_cell(row: int, col: int, origin: Vector2, cell_size: float) -> void:
 		_draw_piece(rect, cell_size, state == HINT_MARK)
 	elif state == BLOCKED_MARK:
 		_draw_blocked(rect, cell_size)
+	elif state == WRONG_MARK:
+		_draw_wrong(rect, cell_size)
 
 	if guide_cells.has(cell_key) and _guide_kind(cell_key) == "exclude":
 		_draw_blocked(rect.grow(-cell_size * 0.08), cell_size)
+
+	if tutorial_mask_enabled:
+		if cell_key == tutorial_focus_cell:
+			var focus_box := StyleBoxFlat.new()
+			focus_box.bg_color = Color(1.0, 1.0, 1.0, 0.0)
+			focus_box.border_color = Color("#FFE06F")
+			focus_box.set_border_width_all(maxi(4, int(cell_size * (0.065 + guide_pulse_strength * 0.04))))
+			focus_box.corner_radius_top_left = int(cell_size * 0.16)
+			focus_box.corner_radius_top_right = int(cell_size * 0.16)
+			focus_box.corner_radius_bottom_left = int(cell_size * 0.16)
+			focus_box.corner_radius_bottom_right = int(cell_size * 0.16)
+			draw_style_box(focus_box, rect.grow(cell_size * 0.035))
+		elif not guide_cells.has(cell_key):
+			var mask_box := StyleBoxFlat.new()
+			mask_box.bg_color = Color(0.10, 0.20, 0.30, 0.34)
+			mask_box.corner_radius_top_left = int(cell_size * 0.14)
+			mask_box.corner_radius_top_right = int(cell_size * 0.14)
+			mask_box.corner_radius_bottom_left = int(cell_size * 0.14)
+			mask_box.corner_radius_bottom_right = int(cell_size * 0.14)
+			draw_style_box(mask_box, rect)
 
 
 func _guide_kind(cell_key: Vector2i) -> String:
@@ -219,6 +338,16 @@ func _draw_blocked(rect: Rect2, cell_size: float) -> void:
 	var width := maxf(2.0, cell_size * 0.035)
 	draw_line(center - Vector2(radius, radius), center + Vector2(radius, radius), color, width, true)
 	draw_line(center + Vector2(radius, -radius), center + Vector2(-radius, radius), color, width, true)
+
+
+func _draw_wrong(rect: Rect2, cell_size: float) -> void:
+	var center := rect.get_center()
+	var radius := cell_size * 0.20
+	var color := Color("#D92F42")
+	var width := maxf(3.0, cell_size * 0.055)
+	draw_line(center - Vector2(radius, radius), center + Vector2(radius, radius), color, width, true)
+	draw_line(center + Vector2(radius, -radius), center + Vector2(-radius, radius), color, width, true)
+	draw_circle(center, cell_size * 0.31, Color(1.0, 0.12, 0.18, 0.12))
 
 
 func _board_geometry() -> Dictionary:

@@ -34,7 +34,7 @@ static func _normalize_level(level: Dictionary) -> void:
 		var difficulty := str(level.get("difficulty", "")).capitalize()
 		level["name"] = "%s %s" % [difficulty, size_text] if difficulty != "" else size_text
 	if not level.has("tutorial") or str(level.get("tutorial", "")).strip_edges() == "":
-		level["tutorial"] = "放置全部皇冠，满足行、列、颜色区域和相邻规则。"
+		level["tutorial"] = "找出全部皇冠，满足行、列、颜色区域和相邻规则。"
 	if not level.has("difficulty") or str(level.get("difficulty", "")).strip_edges() == "":
 		level["difficulty"] = "normal"
 

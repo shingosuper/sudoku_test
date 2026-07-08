@@ -75,7 +75,7 @@
 <circle cx="548" cy="330" r="20" fill="#E23B4A"/>
 <text x="548" y="337" font-family="Arial, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#fff" text-anchor="middle">2</text>
 <text x="580" y="327" font-family="Arial, PingFang SC, sans-serif" font-size="22" font-weight="700" fill="#26334A" text-anchor="start">进度反馈</text>
-<text x="580" y="357" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="400" fill="#536278" text-anchor="start">已放皇冠数实时驱动进度条，达到目标后检查通关。</text>
+<text x="580" y="357" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="400" fill="#536278" text-anchor="start">已找到皇冠数实时驱动进度条，达到目标后检查通关。</text>
 <line x1="408" y1="290" x2="532" y2="330" stroke="#E23B4A" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
 <circle cx="548" cy="505" r="20" fill="#E23B4A"/>
 <text x="548" y="512" font-family="Arial, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#fff" text-anchor="middle">3</text>

@@ -76,6 +76,6 @@
 <circle cx="548" cy="920" r="20" fill="#E23B4A"/>
 <text x="548" y="927" font-family="Arial, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#fff" text-anchor="middle">4</text>
 <text x="580" y="917" font-family="Arial, PingFang SC, sans-serif" font-size="22" font-weight="700" fill="#26334A" text-anchor="start">不自动落子</text>
-<text x="580" y="947" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="400" fill="#536278" text-anchor="start">提示不会替玩家放皇冠，玩家仍需自己完成操作。</text>
+<text x="580" y="947" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="400" fill="#536278" text-anchor="start">提示不会替玩家找出皇冠，玩家仍需自己完成操作。</text>
 <line x1="268" y1="610" x2="532" y2="920" stroke="#E23B4A" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
 </svg>

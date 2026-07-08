@@ -62,7 +62,7 @@
 <circle cx="548" cy="225" r="20" fill="#E23B4A"/>
 <text x="548" y="232" font-family="Arial, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#fff" text-anchor="middle">1</text>
 <text x="580" y="222" font-family="Arial, PingFang SC, sans-serif" font-size="22" font-weight="700" fill="#26334A" text-anchor="start">状态循环</text>
-<text x="580" y="252" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="400" fill="#536278" text-anchor="start">第一次点击标记排除 X，第二次放皇冠，第三次清空。</text>
+<text x="580" y="252" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="400" fill="#536278" text-anchor="start">单击标记排除 X，再次单击取消；双击尝试找皇冠。</text>
 <line x1="296" y1="286" x2="532" y2="225" stroke="#E23B4A" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
 <circle cx="548" cy="430" r="20" fill="#E23B4A"/>
 <text x="548" y="437" font-family="Arial, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#fff" text-anchor="middle">2</text>
